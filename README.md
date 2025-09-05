@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project is part of ** Break Through Tech AI Studio**.  
+This project is part of **Break Through Tech AI Studio**.  
 It proposes the development of a **graphical user interface (GUI)** designed to facilitate the exploration and analysis of large, open-source driving datasets such as **Argoverse, KITTI, nuScenes, and Waymo Open Dataset**.
 
 By leveraging the capabilities of **Vision-Language Models (VLMs)**, the GUI will allow users to:
