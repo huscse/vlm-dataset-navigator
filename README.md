@@ -36,4 +36,4 @@ This project is developed by the Latitude AI 2A team:
 - [Lissette Solano](https://github.com/Lissette31)
 - [Manasvi](https://github.com/ManuPer4)
 - [Yesun Ang](https://github.com/yesun-ang)
-- [Erica li]()
+- [Erica li](https://github.com/erica-1i)
