@@ -1,4 +1,4 @@
-# Latitude AI — AI Studio Challenge Project
+# VLM-Driven Open Dataset Navigator - Latitude AI
 
 ## Project Overview
 
