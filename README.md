@@ -17,7 +17,7 @@ This approach aims to significantly reduce the manual effort currently required 
 
 ## Repository Structure
 
-- **frontend/** → Next.js / React app for the GUI -- undecided
+- **frontend/** → Next.js + Tailwind css for the GUI
 - **backend/** → APIs, search, summarization, and VLM integration
 - **data/** → placeholder for datasets (ignored in git)
 - **docs/** → documentation, architecture diagrams, notes
