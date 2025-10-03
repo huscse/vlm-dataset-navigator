@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -38,9 +37,6 @@ export default function SignUp() {
       password,
       options: {
         data: { full_name: name },
-        // If you want an email confirmation link, leave this as-is.
-        // If you disabled confirmations in Supabase Auth settings,
-        // you’ll be signed in immediately after sign-up.
       },
     });
 
@@ -65,7 +61,7 @@ export default function SignUp() {
       <div className="w-full max-w-md">
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-4xl font-bold text-white mb-4">
-            Navis
+            Navis.
           </h1>
           <p className="text-slate-300 text-xl">Create your account</p>
         </div>

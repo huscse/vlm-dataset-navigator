@@ -41,7 +41,7 @@ export default function SignIn() {
       <div className="w-full max-w-md">
         <div className="text-center mb-12">
           <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Navis
+            Navis.
           </h1>
           <p className="text-slate-300 text-xl">Sign in to your account</p>
         </div>
