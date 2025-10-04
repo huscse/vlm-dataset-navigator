@@ -6,7 +6,7 @@ export default function GitHubButton() {
     await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: 'https://vlm-dataset-navigator-frontend.vercel.app/header',
+        redirectTo: 'https://vlm-dataset-navigator-frontend.vercel.app/signin',
         // For production, change to deployed URL:
         // redirectTo: 'https://navis.vercel.app'
         scopes: 'read:user user:email', // default is fine, this is optional
