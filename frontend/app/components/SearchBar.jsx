@@ -1,15 +1,18 @@
-"use client";
-import React, { useState } from "react";
+'use client';
+import React, { useState, useRef } from 'react';
+import { Search, X, Loader2 } from 'lucide-react';
 
 export default function SearchBar({
   onSearch,
-  placeholder = "Search scenes, objects, or events…",
-  defaultValue = "",
+  placeholder = 'Search scenes, objects, or events…',
+  defaultValue = '',
   loading = false,
   disabled = false,
-  className = "",
+  className = '',
 }) {
   const [q, setQ] = useState(defaultValue);
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef(null);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -18,46 +21,87 @@ export default function SearchBar({
     onSearch(trimmed);
   }
 
+  function handleClear() {
+    setQ('');
+    inputRef.current?.focus();
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') {
+      handleSubmit(e);
+    }
+  }
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={`flex items-center gap-2 w-full ${className}`}
+    <div
+      className={`flex items-center gap-3 w-full ${className}`}
       role="search"
       aria-label="Dataset search"
     >
-      <div className="flex-1 relative">
+      <div className="flex-1 relative group">
+        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <Search
+            className={`w-5 h-5 transition-colors ${
+              isFocused ? 'text-gray-400' : 'text-gray-500'
+            }`}
+          />
+        </div>
+
         <input
+          ref={inputRef}
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="w-full rounded-xl border border-gray-300 focus:border-gray-400 focus:outline-none px-4 py-2 pr-10 shadow-sm"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          onKeyDown={handleKeyDown}
+          className={`w-full rounded-full border bg-white/5 backdrop-blur-sm pl-12 pr-12 py-3.5 text-white placeholder:text-gray-500 transition-all duration-200 focus:outline-none ${
+            isFocused
+              ? 'border-gray-600 bg-white/10 shadow-lg shadow-black/20'
+              : 'border-gray-700 hover:border-gray-600'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
           placeholder={placeholder}
           aria-label="Search query"
           disabled={disabled || loading}
         />
 
-        {/* clear button */}
-        {q && !loading && (
-          <button
-            type="button"
-            onClick={() => setQ("")}
-            className="absolute inset-y-0 right-2 my-auto text-gray-500 hover:text-gray-700"
-            aria-label="Clear search"
-            title="Clear"
-          >
-            ×
-          </button>
+        {/* Clear button or loading spinner */}
+        {q && (
+          <div className="absolute inset-y-0 right-3 flex items-center">
+            {loading ? (
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            ) : (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="p-1 rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-all"
+                aria-label="Clear search"
+                title="Clear"
+                tabIndex={-1}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       <button
-        type="submit"
-        disabled={disabled || loading}
-        className="rounded-xl px-4 py-2 bg-black text-white disabled:opacity-60 hover:opacity-90 transition"
+        type="button"
+        onClick={handleSubmit}
+        disabled={disabled || loading || !q.trim()}
+        className="rounded-full px-6 py-3.5 bg-white text-gray-900 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 active:scale-95 transition-all duration-200 whitespace-nowrap"
         aria-busy={loading}
       >
-        {loading ? "Searching…" : "Search"}
+        {loading ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Searching…
+          </span>
+        ) : (
+          'Search'
+        )}
       </button>
-    </form>
+    </div>
   );
 }
