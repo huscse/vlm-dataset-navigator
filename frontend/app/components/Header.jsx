@@ -7,6 +7,7 @@ import SearchBar from './SearchBar';
 import SearchResults from './SearchResults';
 import { searchDatasets } from '../lib/api';
 import { User } from 'lucide-react';
+import Image from 'next/image';
 
 export default function Header() {
   const router = useRouter();
@@ -117,7 +118,13 @@ export default function Header() {
       <div className="sticky top-0 z-10 bg-black/20 backdrop-blur border-b border-white/10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           {/* Logo */}
-          <div className="text-xl font-bold text-white">Navis.</div>
+          <Image
+            src="/images/navislogo.png"
+            alt="Navis Logo"
+            width={100}
+            height={40}
+            className="object-contain text-white"
+          />
 
           {/* Right actions */}
           <div className="flex items-center gap-3">

@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 const Navigation = () => {
   const Router = useRouter();
@@ -11,7 +12,13 @@ const Navigation = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <h2 className="text-2xl font-bold">Navis.</h2>
+              <Image
+                src="/images/navislogo.png"
+                alt="Navis Logo"
+                width={100}
+                height={40}
+                className="object-contain text-white"
+              />
             </div>
 
             <div className="hidden md:flex space-x-4">
@@ -28,7 +35,7 @@ const Navigation = () => {
                   Router.push('/signup');
                 }}
               >
-                Get Started
+                Sign up
               </button>
             </div>
           </div>

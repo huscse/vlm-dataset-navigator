@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import GitHubButton from './GithubButton';
+import { User } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 
 export default function SignUp() {
   const [name, setName] = useState('');
@@ -125,6 +127,7 @@ export default function SignUp() {
             </Link>
           </span>
         </div>
+
         <GitHubButton />
       </div>
     </div>

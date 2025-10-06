@@ -5,7 +5,7 @@ import Link from 'next/link';
 const Hero = () => {
   const router = useRouter();
   const changeRoute = () => {
-    router.push('/signup');
+    router.push('/header');
   };
   return (
     <div>
