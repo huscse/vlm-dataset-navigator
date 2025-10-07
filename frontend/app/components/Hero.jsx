@@ -13,7 +13,7 @@ const Hero = () => {
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
           <div className="text-center">
-            <h1 className="font-[var(--font-orbitron)] text-5xl md:text-5xl lg:text-5xl font-bold mb-6 leading-tight">
+            <h1 className="text-5xl md:text-5xl lg:text-5xl font-bold mb-6 leading-tight">
               VLM-Driven Open Dataset
               <br />
               <span className="text-slate-400">Navigator</span>
