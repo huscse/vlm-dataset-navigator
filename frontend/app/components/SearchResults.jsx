@@ -1,4 +1,3 @@
-// frontend/app/components/SearchResults.jsx
 'use client';
 
 import React from 'react';
