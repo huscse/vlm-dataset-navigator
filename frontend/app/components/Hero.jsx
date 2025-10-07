@@ -13,10 +13,14 @@ const Hero = () => {
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
           <div className="text-center">
-            <h1 className="text-5xl md:text-5xl lg:text-5xl font-bold mb-6 leading-tight">
-              VLM-Driven Open Dataset
+            <h1 className="text-5xl md:text-5xl lg:text-5xl font-bold mb-6 leading-tight font-extrabold tracking-tight">
+              VLM-Driven
+              <span className="text-slate-300 font-extrabold">
+                {' '}
+                Open Dataset
+              </span>
               <br />
-              <span className="text-slate-400">Navigator</span>
+              <span>Navigator</span>
             </h1>
             <p className="text-xl md:text-2xl text-slate-300 mb-12 max-w-3xl mx-auto">
               Explore and analyze large-scale driving datasets with the power of
