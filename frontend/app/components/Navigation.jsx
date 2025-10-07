@@ -11,16 +11,17 @@ const Navigation = () => {
       <nav className="border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Image
-                src="/images/navislogodraft.png"
-                alt="Navis Logo"
-                width={100}
-                height={40}
-                className="object-contain text-white"
-                href="/"
-                cursor="pointer"
-              />
+            <div className="flex items-center w-40 h-12">
+              <Link href="/">
+                <Image
+                  src="/images/navislogodraft.png"
+                  alt="Navis Logo"
+                  className="object-contain cursor-pointer"
+                  width={100}
+                  height={40}
+                  priority
+                />
+              </Link>
             </div>
 
             <div className="hidden md:flex space-x-4">

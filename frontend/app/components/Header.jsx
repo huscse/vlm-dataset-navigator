@@ -8,6 +8,7 @@ import SearchResults from './SearchResults';
 import { searchDatasets } from '../lib/api';
 import { User } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 export default function Header() {
   const router = useRouter();
@@ -118,13 +119,16 @@ export default function Header() {
       <div className="sticky top-2 bottom-2 z-10 bg-black/20 backdrop-blur border-b border-white/10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           {/* Logo */}
-          <Image
-            src="/images/navislogodraft.png"
-            alt="Navis Logo"
-            width={100}
-            height={40}
-            className="object-contain text-white"
-          />
+          <Link href="/">
+            <Image
+              src="/images/navislogodraft.png"
+              alt="Navis Logo"
+              width={100}
+              height={40}
+              priority
+              className="object-contain text-white cursor-pointer"
+            />
+          </Link>
 
           {/* Right actions */}
           <div className="flex items-center gap-3">

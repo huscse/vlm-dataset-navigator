@@ -42,7 +42,7 @@ export default function SearchResults({ results, loading, error }) {
         <h3 className="text-xl font-semibold text-white mb-2">
           Start Your Search
         </h3>
-        <p className="text-gray-400 leading-relaxed">
+        <p className="text-slate-300 leading-relaxed">
           Try searching for scenes like{' '}
           <span className="text-white font-medium">"pedestrian crossing"</span>,{' '}
           <span className="text-white font-medium">"red light"</span>, or{' '}
