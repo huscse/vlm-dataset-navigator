@@ -25,14 +25,14 @@ export default function ResultCard({ result, index }) {
             <span className="text-sm">No preview available</span>
           </div>
         )}
-
-        {/* Timestamp badge */}
-        {typeof result.timestampSec !== 'undefined' && (
+        
+        {/* Timestamp badge */} // will add later if needed
+        {/* {typeof result.timestampSec !== 'undefined' && (
           <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs text-white font-medium">
             <Clock className="w-3 h-3" />
             {Math.round(result.timestampSec)}s
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Content */}
