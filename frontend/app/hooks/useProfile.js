@@ -56,7 +56,7 @@ export function useProfile(isOpen) {
       });
       if (updateError) throw updateError;
 
-      // Update local profile object so UI updates immediately
+      // Update local profile object so UI updates immediately without refetch
       setProfile((p) =>
         p
           ? {
