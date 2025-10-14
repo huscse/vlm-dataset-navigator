@@ -1,4 +1,3 @@
-// Description: Header component with authentication, search functionality, and profile modal
 'use client';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
