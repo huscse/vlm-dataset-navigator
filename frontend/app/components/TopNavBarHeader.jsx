@@ -4,10 +4,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { User } from 'lucide-react';
 
-export default function TopNavBarHeader({ session, onSignOut, onProfileClick }) {
+export default function TopNavBarHeader({
+  session,
+  onSignOut,
+  onProfileClick,
+}) {
   return (
-    <div className="sticky top-2 bottom-2 z-10 bg-black/20 backdrop-blur border-b border-white/10">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+    <div className="sticky top-5 bottom-2 z-10 backdrop-blur">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/">
           <Image

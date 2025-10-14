@@ -8,10 +8,10 @@ const Navigation = () => {
   return (
     <div>
       {' '}
-      <nav className="border-b border-slate-800">
+      <nav>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center w-40 h-12">
+            <div className="flex items-center w-40 h-16 mt-5">
               <Link href="/">
                 <Image
                   src="/images/navislogodraft.png"
@@ -24,7 +24,7 @@ const Navigation = () => {
               </Link>
             </div>
 
-            <div className="hidden md:flex space-x-4">
+            <div className="hidden md:flex space-x-4 mt-5">
               <Link
                 href="/signin"
                 className="px-4 py-2 text-slate-300 hover:text-white transition-colors"

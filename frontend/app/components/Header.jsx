@@ -8,6 +8,7 @@ import { searchDatasets } from '../lib/api';
 import TopNavBar from './TopNavBarHeader';
 import HeroSection from './HeroSection';
 import ProfileModal from './ProfileModal';
+import Footer from './Footer';
 
 export default function Header() {
   const router = useRouter();
@@ -62,7 +63,13 @@ export default function Header() {
 
       <HeroSection onSearch={handleSearch} loading={loading} />
 
-      <SearchResults results={results} loading={loading} error={error} />
+      <SearchResults
+        results={results}
+        loading={loading}
+        error={error}
+        className="bg-[linear-gradient(180deg,#111827_0%,#000000_45%,#1F2937_95%)]"
+      />
+      <Footer />
     </div>
   );
 }
