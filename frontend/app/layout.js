@@ -17,8 +17,8 @@ const orbitron = Orbitron({
 });
 
 export const metadata = {
-  title: 'Driving Dataset Navigator',
-  description: 'Search driving datasets with natural language',
+  title: 'Navis – Where Vision Meets Language',
+  description: 'Search the road, frame by frame',
   icons: {
     icon: '/favicon.ico',
   },
