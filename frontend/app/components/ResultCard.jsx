@@ -1,14 +1,13 @@
-// frontend/app/components/ResultCard.jsx
 'use client';
 
 import React from 'react';
-import { Clock, Database, Image as ImageIcon } from 'lucide-react';
+import { Database, Image as ImageIcon } from 'lucide-react';
 
 export default function ResultCard({ result, index }) {
   return (
     <article className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl overflow-hidden hover:from-white/10 hover:to-white/5 hover:border-white/20 hover:shadow-xl hover:shadow-black/20 transition-all duration-300 group cursor-pointer">
       {/* Thumbnail */}
-      <div className="relative h-48 bg-gradient-to-br from-gray-900 to-gray-950 overflow-hidden">
+      <div className="relative h-48 overflow-hidden">
         {result.thumbnailUrl ? (
           <>
             <img
@@ -24,7 +23,7 @@ export default function ResultCard({ result, index }) {
             <span className="text-sm">No preview available</span>
           </div>
         )}
-        {/* Timestamp badge */} // will add later if needed
+        {/* Timestamp badge */} will add later if needed
         {/* {typeof result.timestampSec !== 'undefined' && (
           <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs text-white font-medium">
             <Clock className="w-3 h-3" />
