@@ -65,7 +65,7 @@ export default function SearchBar({
           disabled={disabled || loading}
         />
 
-        {/* Clear button or loading spinner */}
+        {/* Clear button / loading spinner */}
         {q && (
           <div className="absolute inset-y-0 right-3 flex items-center">
             {loading ? (
