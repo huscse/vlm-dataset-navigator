@@ -25,7 +25,7 @@ const Team = () => {
       github: 'ManuPer4',
       role: 'Data Processing / Exploration',
     },
-    { name: 'Yesun Ang', github: 'yesun-ang', role: 'VLM / Data Exploration' },
+    { name: 'Yesun Ang', github: 'yesun-ang', role: 'VLM / Data Processing' },
     { name: 'Erica Li', github: 'erica-1i', role: 'UI/UX - Frontend' },
   ];
 
