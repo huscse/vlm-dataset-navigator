@@ -55,7 +55,7 @@ const About = () => {
               experience for researchers and engineers working with vision data.
             </p>
 
-            <p>
+            <p className="text-xl">
               Under the hood, this system combines multiple state-of-the-art AI
               components.
               <span className="text-white font-semibold"> CLIP </span> encodes
@@ -71,7 +71,7 @@ const About = () => {
               search across millions of vectors.
             </p>
 
-            <p>
+            <p className="text-xl">
               By unifying these components, the navigator dramatically reduces
               the manual overhead that researchers typically face when studying
               open-source driving datasets. Whether you’re investigating rare
