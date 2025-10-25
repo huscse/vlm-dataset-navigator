@@ -1,15 +1,26 @@
-// For Landing Page component
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const Hero = () => {
   const router = useRouter();
-  const changeRoute = () => {
-    router.push('/header');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const handleTransition = (path) => {
+    setIsTransitioning(true);
+    // For smoother transition, delay navigation
+    setTimeout(() => {
+      router.push(path);
+    }, 400);
   };
+
   return (
-    <div>
-      {' '}
+    <div
+      className={`transition-all duration-400 ease-in-out transform ${
+        isTransitioning
+          ? 'opacity-0 scale-95 -translate-y-4'
+          : 'opacity-100 scale-100 translate-y-0'
+      }`}
+    >
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
           <div className="text-center">
@@ -29,16 +40,16 @@ const Hero = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={changeRoute}
-                className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-lg font-medium transition-colors cursor-pointer"
+                onClick={() => handleTransition('/header')}
+                disabled={isTransitioning}
+                className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-lg font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
               >
                 Get Started
               </button>
               <button
-                className="px-8 py-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-lg font-medium transition-colors cursor-pointer"
-                onClick={() => {
-                  router.push('/about');
-                }}
+                onClick={() => handleTransition('/about')}
+                disabled={isTransitioning}
+                className="px-8 py-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-lg font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
               >
                 Learn More
               </button>

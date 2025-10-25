@@ -69,6 +69,9 @@ export default function SignIn() {
             <button
               type="button"
               className="text-slate-400 hover:text-slate-300 text-sm transition-colors bg-transparent border-0 cursor-pointer"
+              onClick={() => {
+                alert('Password reset is not implemented yet.');
+              }}
             >
               Forgot password?
             </button>
