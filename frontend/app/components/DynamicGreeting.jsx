@@ -12,12 +12,7 @@ export default function DynamicGreeting() {
         second: 'Search open-world',
         endHighlight: 'driving data.',
       },
-      {
-        main: 'Semantic search',
-        highlight: 'armed',
-        second: "Type a cue — I'll surface",
-        endHighlight: 'matching frames.',
-      },
+
       {
         main: 'Perception stack',
         highlight: 'awake',
