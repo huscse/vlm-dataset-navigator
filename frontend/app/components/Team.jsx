@@ -30,8 +30,8 @@ const Team = () => {
   ];
 
   return (
-    <div className="mt-24">
-      <div className="text-center mb-12">
+    <div className="mt-4">
+      <div className="text-center mb-12 mt-0">
         <h3 className="text-4xl font-bold mb-3">
           Meet the Team - Latitude AI 2A{' '}
         </h3>
