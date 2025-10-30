@@ -6,19 +6,32 @@ export default function SearchBar({
   onSearch,
   placeholder = 'Describe a moment…',
   defaultValue = '',
-  loading = false,
+  loading: loadingProp, 
   disabled = false,
   className = '',
 }) {
   const [q, setQ] = useState(defaultValue);
   const [isFocused, setIsFocused] = useState(false);
+  const [internalLoading, setInternalLoading] = useState(false);
   const inputRef = useRef(null);
 
-  function handleSubmit(e) {
+  const loading = loadingProp ?? internalLoading; // external > internal
+
+  async function handleSubmit(e) {
     e.preventDefault();
     const trimmed = q.trim();
-    if (trimmed.length === 0) return;
-    onSearch(trimmed);
+    if (!trimmed) return;
+
+    const maybePromise = onSearch?.(trimmed);
+    // If parent returns a promise, manage internal loading
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      try {
+        setInternalLoading(true);
+        await maybePromise;
+      } finally {
+        setInternalLoading(false);
+      }
+    }
   }
 
   function handleClear() {
@@ -27,9 +40,7 @@ export default function SearchBar({
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter') {
-      handleSubmit(e);
-    }
+    if (e.key === 'Enter') handleSubmit(e);
   }
 
   return (
@@ -65,7 +76,7 @@ export default function SearchBar({
           disabled={disabled || loading}
         />
 
-        {/* Clear button / loading spinner */}
+        {/* Clear button / loading spinner appears only when there's text */}
         {q && (
           <div className="absolute inset-y-0 right-3 flex items-center">
             {loading ? (
