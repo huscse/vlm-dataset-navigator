@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { useAuthSession } from '../lib/useAuthSession';
 import SearchResults from './SearchResults';
@@ -10,9 +10,8 @@ import HeroSection from './HeroSection';
 import ProfileModal from './ProfileModal';
 import Footer from './Footer';
 
-export default function Header() {
+export default function Header({ initialQuery }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const session = useAuthSession();
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -22,11 +21,10 @@ export default function Header() {
 
   // Run search on mount if URL has query
   useEffect(() => {
-    const query = searchParams.get('q');
-    if (query) {
-      handleSearch(query, false); // false = don't update URL
+    if (initialQuery) {
+      handleSearch(initialQuery, false); // false = don't update URL
     }
-  }, []); // Only run once on mount
+  }, [initialQuery]);
 
   const handleSignOut = async () => {
     try {
@@ -41,7 +39,7 @@ export default function Header() {
     setError(null);
     setLoading(true);
 
-    // Update URL with query
+    // Update URL with query (client-side)
     if (updateUrl) {
       const url = new URL(window.location.href);
       url.searchParams.set('q', query);
