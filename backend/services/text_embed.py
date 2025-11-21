@@ -1,11 +1,16 @@
 from __future__ import annotations
-import torch
-import clip
+from sentence_transformers import SentenceTransformer
 import numpy as np
+from functools import lru_cache
 
-_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# Must match the model used by workers/embedder.py
-_MODEL, _PREPROCESS = clip.load("ViT-B/32", device=_DEVICE)
+@lru_cache(maxsize=1)
+def _get_model():
+    """
+    Load CLIP model using sentence-transformers (lightweight).
+    Uses 'clip-ViT-B-32' which is compatible with OpenAI CLIP embeddings.
+    Cached to load only once.
+    """
+    return SentenceTransformer('clip-ViT-B-32')
 
 def get_text_embedding(text: str) -> list[float]:
     """
@@ -13,9 +18,12 @@ def get_text_embedding(text: str) -> list[float]:
     with image embeddings we stored.
     Returns a Python list[float] (length 512) for psycopg2 vector casting.
     """
-    with torch.no_grad():
-        token = clip.tokenize([text]).to(_DEVICE)
-        vec = _MODEL.encode_text(token).float()
-        vec = vec / vec.norm(dim=-1, keepdim=True)
-        arr = vec.cpu().numpy()[0]  # shape (512,)
-    return arr.tolist()
+    model = _get_model()
+    
+    # Encode text to embedding
+    embedding = model.encode(text, convert_to_numpy=True)
+    
+    # L2 normalize
+    embedding = embedding / np.linalg.norm(embedding)
+    
+    return embedding.tolist()

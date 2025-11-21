@@ -1,6 +1,5 @@
 # backend/workers/embedder.py
 from __future__ import annotations
-
 import argparse
 import io
 import sys
@@ -8,10 +7,11 @@ import time
 import traceback
 from pathlib import Path
 from urllib.parse import urlparse
+from functools import lru_cache
 
 import numpy as np
-import torch
 from PIL import Image
+from sentence_transformers import SentenceTransformer
 
 # --- Make "backend" imports work whether you run from repo root or /backend ---
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +20,6 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from db.postgres import get_conn
 from services.drive import resolve_path, download_bytes
-import clip
-
 
 # -------------------------- CLI args -----------------------------------------
 parser = argparse.ArgumentParser(description="Embed frames and store vectors in Postgres.")
@@ -30,21 +28,17 @@ parser.add_argument("--once", action="store_true", help="Process one batch and e
 parser.add_argument("--dataset", type=str, default=None, help="Filter by dataset slug (e.g., kitti, nuscenes)")
 parser.add_argument("--scene", type=str, default=None, help="Filter by scene_token")
 parser.add_argument("--sensor", type=str, default=None, help="Filter by sensor (e.g., image_00, CAM_FRONT)")
+
 ARGS = parser.parse_args()
 
-
 # -------------------------- Model --------------------------------------------
-if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-    DEVICE = "mps"
-elif torch.cuda.is_available():
-    DEVICE = "cuda"
-else:
-    DEVICE = "cpu"
+@lru_cache(maxsize=1)
+def _get_model():
+    """Load CLIP model using sentence-transformers (cached)."""
+    return SentenceTransformer('clip-ViT-B-32')
 
-MODEL, PREPROCESS = clip.load("ViT-B/32", device=DEVICE)
 MODEL_NAME = "openai/clip-vit-b-32"
 MODEL_DIMS = 512
-
 
 # -------------------------- Helpers ------------------------------------------
 def get_col(row, key_or_idx):
@@ -52,7 +46,6 @@ def get_col(row, key_or_idx):
     if isinstance(row, dict):
         return row[key_or_idx]
     return row[key_or_idx]  # index for tuple rows
-
 
 def get_or_create_model_id(cur) -> int:
     cur.execute("SELECT id FROM navis.models WHERE name=%s", (MODEL_NAME,))
@@ -65,7 +58,6 @@ def get_or_create_model_id(cur) -> int:
     )
     r = cur.fetchone()
     return get_col(r, "id") if isinstance(r, dict) else r[0]
-
 
 def load_image_for_frame(conn, frame_id: int, media_key: str) -> Image.Image:
     """Use dataset media_base_uri to decide how to fetch (gdrive vs local)."""
@@ -102,15 +94,17 @@ def load_image_for_frame(conn, frame_id: int, media_key: str) -> Image.Image:
         raise FileNotFoundError(f"Local file not found: {img_path}")
     return Image.open(img_path).convert("RGB")
 
-
 def embed_image(img: Image.Image) -> np.ndarray:
-    with torch.no_grad():
-        im = PREPROCESS(img).unsqueeze(0).to(DEVICE)
-        vec = MODEL.encode_image(im).float()
-        vec = vec / vec.norm(dim=-1, keepdim=True)  # L2 normalize => cosine similarity
-    # pgvector works great with float4[]; Python list is safest via psycopg2
-    return vec.cpu().numpy()[0].astype(np.float32)
-
+    """Encode image using sentence-transformers CLIP model."""
+    model = _get_model()
+    
+    # Convert PIL image to embedding
+    embedding = model.encode(img, convert_to_numpy=True)
+    
+    # L2 normalize for cosine similarity
+    embedding = embedding / np.linalg.norm(embedding)
+    
+    return embedding.astype(np.float32)
 
 # -------------------------- Main loop ----------------------------------------
 def main():
@@ -128,66 +122,72 @@ def main():
             if ARGS.dataset:
                 where_clauses.append("d.slug = %s")
                 params.append(ARGS.dataset)
+
             if ARGS.scene:
                 where_clauses.append("s.scene_token = %s")
                 params.append(ARGS.scene)
+
             if ARGS.sensor:
                 where_clauses.append("s.sensor = %s")
                 params.append(ARGS.sensor)
+
+            where_sql = " AND ".join(where_clauses)
 
             sql = f"""
                 SELECT f.id, f.media_key
                 FROM navis.frames f
                 JOIN navis.sequences s ON s.id = f.sequence_id
-                JOIN navis.datasets  d ON d.id = s.dataset_id
-                WHERE {' AND '.join(where_clauses)}
+                JOIN navis.datasets d ON d.id = s.dataset_id
+                WHERE {where_sql}
                 ORDER BY f.id
                 LIMIT %s
             """
             params.append(ARGS.limit)
-            cur.execute(sql, tuple(params))
-            batch = cur.fetchall()
 
-            # Normalize rows to (frame_id, media_key)
+            batch = cur.fetchall()
+            # psycopg might return dict or tuple rows
             if batch and isinstance(batch[0], dict):
                 batch = [(r["id"], r["media_key"]) for r in batch]
 
         if not batch:
             print("✅ No pending frames for this model/filter. Sleeping 10s…")
             if ARGS.once:
-                print("Nothing to do (--once). Exiting.")
                 return
             time.sleep(10)
             continue
 
+        # Process embeddings
         to_insert = []
-        with get_conn() as conn, conn.cursor() as cur:
-            for frame_id, media_key in batch:
-                try:
-                    print(f"Embedding frame {frame_id} — {media_key}")
-                    img = load_image_for_frame(conn, frame_id, media_key)
-                    vec = embed_image(img)                 # np.ndarray (512,)
-                    to_insert.append((frame_id, model_id, vec.tolist()))
-                    print(f"✅ Embedded frame_id={frame_id}")
-                except Exception as e:
-                    print(f"⚠️ Skipping frame_id={frame_id}: {e!s}")
-                    traceback.print_exc()
+        for frame_id, media_key in batch:
+            print(f"Embedding frame {frame_id} — {media_key}")
+            try:
+                img = load_image_for_frame(conn, frame_id, media_key)
+                emb_vec = embed_image(img)
+                emb_json = emb_vec.tolist()
+                to_insert.append((frame_id, model_id, emb_json))
+                print(f"✅ Embedded frame_id={frame_id}")
+            except Exception as e:
+                print(f"⚠️ Skipping frame_id={frame_id}: {e}")
+                traceback.print_exc()
+                continue
 
-            if to_insert:
+        # Bulk insert embeddings
+        if to_insert:
+            import json
+            with get_conn() as conn, conn.cursor() as cur:
                 cur.executemany(
-                """
-                INSERT INTO navis.embeddings(frame_id, model_id, emb)
-                VALUES (%s, %s, %s)
-                ON CONFLICT DO NOTHING
-                """,
-                to_insert,
-            )
+                    """
+                    INSERT INTO navis.embeddings (frame_id, model_id, emb)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    [(fid, mid, json.dumps(emb)) for fid, mid, emb in to_insert],
+                )
             conn.commit()
 
         if ARGS.once:
             print("Done one batch (--once). Exiting.")
             return
-
 
 if __name__ == "__main__":
     main()
