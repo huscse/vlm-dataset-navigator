@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response
 from urllib.parse import urlparse
-from psycopg2.extras import RealDictCursor
 from psycopg.rows import dict_row
 
 from functools import lru_cache
