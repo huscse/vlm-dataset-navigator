@@ -6,7 +6,7 @@ export default function SearchBar({
   onSearch,
   placeholder = 'Describe a moment…',
   defaultValue = '',
-  loading: loadingProp, 
+  loading: loadingProp,
   disabled = false,
   className = '',
 }) {

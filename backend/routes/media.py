@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response
 from urllib.parse import urlparse
-from psycopg2.extras import RealDictCursor
 from psycopg.rows import dict_row
 
 from functools import lru_cache
@@ -13,7 +12,7 @@ from backend.services.drive import resolve_path, download_bytes
 router = APIRouter(prefix="/media", tags=["media"])
 
 # Thread pool for non-blocking Drive downloads
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(max_workers=1)
 
 @lru_cache(maxsize=1)
 def get_gdrive_root():

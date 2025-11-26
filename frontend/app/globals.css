@@ -5,7 +5,6 @@
   --foreground: #171717;
 }
 
-/* Hide Next.js dev overlay launcher (only affects dev) */
 button[aria-label='Open Next.js Dev Overlay'],
 [data-nextjs-dev-overlay],
 [data-nextjs-portal] {

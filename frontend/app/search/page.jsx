@@ -1,81 +1,135 @@
-"use client";
-import React, { useState } from "react";
-import SearchBar from "../components/SearchBar";  // ✅ correct path for your project
-import { searchDatasets } from "../lib/api";
+'use client';
+
+import { useState } from 'react';
+
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function SearchPage() {
-  const [results, setResults] = useState([]);
+  const [q, setQ] = useState('a car turning left at an intersection');
+  const [k, setK] = useState(12);
+  const [dataset, setDataset] = useState(''); // e.g. "kitti" or "nuscenes"
+  const [sequence, setSequence] = useState(''); // optional scene token/name
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [lastQuery, setLastQuery] = useState("");
+  const [hits, setHits] = useState([]);
+  const [error, setError] = useState('');
 
-  async function handleSearch(q) {
+  async function runSearch(e) {
+    e?.preventDefault();
+    setLoading(true);
+    setError('');
+    setHits([]);
+
+    const params = new URLSearchParams();
+    params.set('text', q);
+    params.set('k', String(k));
+    if (dataset.trim()) params.set('dataset', dataset.trim());
+    if (sequence.trim()) params.set('sequence', sequence.trim());
+
     try {
-      setLoading(true);
-      setError(null);
-      setLastQuery(q);
-      const data = await searchDatasets(q);
-      setResults(data);
-    } catch (e) {
-      setError(e?.message || "Something went wrong.");
-      setResults([]);
+      const res = await fetch(`${BACKEND}/search?` + params.toString());
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`${res.status} ${res.statusText}: ${txt}`);
+      }
+      const data = await res.json();
+      // media_url from backend is relative (/media/...), make it absolute for the <img>
+      const patched = (data.hits ?? []).map((h) => ({
+        ...h,
+        absUrl: `${BACKEND}${
+          h.media_url.startsWith('/') ? h.media_url : `/${h.media_url}`
+        }`,
+      }));
+      setHits(patched);
+    } catch (err) {
+      setError(err.message || 'Search failed');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-semibold">Search Datasets</h1>
+    <main className="mx-auto max-w-6xl px-4 py-8">
+      <h1 className="text-3xl font-semibold mb-6">Semantic Search</h1>
 
-      <SearchBar onSearch={handleSearch} loading={loading} className="mt-2" />
+      <form
+        onSubmit={runSearch}
+        className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-6"
+      >
+        <input
+          className="md:col-span-3 border rounded-lg px-3 py-2"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Describe what you want to see (e.g., 'people not:car')"
+        />
+        <input
+          className="border rounded-lg px-3 py-2"
+          type="number"
+          min={1}
+          max={50}
+          value={k}
+          onChange={(e) => setK(Number(e.target.value))}
+          placeholder="k"
+          title="Top-K results"
+        />
+        <input
+          className="border rounded-lg px-3 py-2"
+          value={dataset}
+          onChange={(e) => setDataset(e.target.value)}
+          placeholder="dataset (optional: kitti, nuscenes)"
+        />
+        <input
+          className="border rounded-lg px-3 py-2"
+          value={sequence}
+          onChange={(e) => setSequence(e.target.value)}
+          placeholder="sequence / scene (optional)"
+        />
+        <button
+          type="submit"
+          className="md:col-span-6 bg-black text-white rounded-lg px-4 py-2 hover:opacity-90"
+          disabled={loading}
+        >
+          {loading ? 'Searching…' : 'Search'}
+        </button>
+      </form>
 
-      <section className="min-h-40">
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-red-700">
+          {error}
+        </div>
+      )}
 
-        {!error && !loading && results.length === 0 && lastQuery && (
-          <p className="text-gray-600">No results found for “{lastQuery}”.</p>
-        )}
+      {!loading && hits.length === 0 && !error && (
+        <p className="text-gray-500">No results yet. Try a query above.</p>
+      )}
 
-        {!error && !lastQuery && (
-          <p className="text-gray-500">
-            Try something like: <em>“red traffic light with pedestrian”</em> or{" "}
-            <em>“cyclist near parked cars”</em>.
-          </p>
-        )}
-
-        {!error && results.length > 0 && (
-          <>
-            <p className="text-sm text-gray-500">
-              Found {results.length} result{results.length > 1 ? "s" : ""} for “{lastQuery}”
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-              {results.map((r) => (
-                <article key={r.id} className="border rounded-xl p-3 hover:shadow-sm transition bg-white">
-                  {r.thumbnailUrl && (
-                    <img
-                      src={r.thumbnailUrl}
-                      alt={r.title}
-                      className="w-full h-40 object-cover rounded-lg mb-2"
-                    />
-                  )}
-                  <h3 className="font-medium">{r.title}</h3>
-                  {r.snippet && (
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{r.snippet}</p>
-                  )}
-                  <div className="flex items-center gap-3 text-xs text-gray-500 mt-2">
-                    {r.dataset && <span>{r.dataset}</span>}
-                    {typeof r.timestampSec === "number" && <span>{r.timestampSec}s</span>}
-                  </div>
-                </article>
-              ))}
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {hits.map((h) => (
+          <li
+            key={h.frame_id}
+            className="border rounded-xl overflow-hidden shadow-sm"
+          >
+            <div className="aspect-[4/3] bg-gray-100">
+              {/* Next/Image would require next.config; <img> is simplest for localhost */}
+              <img
+                src={h.absUrl}
+                alt={h.media_key}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
             </div>
-          </>
-        )}
-      </section>
+            <div className="p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{h.dataset}</span>
+                <span className="tabular-nums text-gray-500">
+                  sim: {h.score.toFixed(3)}
+                </span>
+              </div>
+              <div className="text-gray-600 truncate">{h.sequence}</div>
+              <div className="text-gray-500 truncate">{h.media_key}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
     </main>
-  )};
+  );
+}

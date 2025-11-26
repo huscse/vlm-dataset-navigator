@@ -10,7 +10,8 @@ export function useProfile(isOpen) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch profile when modal opens
+  // Fetch profile when modal opens then populate state variables so inputs are controlled
+  // and can be edited before saving back to Supabase user metadata table
   useEffect(() => {
     if (!isOpen) return;
 

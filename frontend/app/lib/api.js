@@ -1,36 +1,61 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+// app/lib/api.js
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '');
 
-export async function searchDatasets(query) {
-  if (API_BASE) {
-    const res = await fetch(
-      `${API_BASE.replace(/\/$/, '')}/search?query=${encodeURIComponent(
-        query,
-      )}`,
-      { headers: { Accept: 'application/json' } },
+function ensureBase() {
+  if (!API_BASE) {
+    throw new Error(
+      'NEXT_PUBLIC_BACKEND_URL is not set. Add it to .env.local (e.g., http://127.0.0.1:8000).',
     );
-    if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-    const data = await res.json();
-    return data.results ?? [];
+  }
+}
+
+// ---- Semantic search over frames ----
+export async function semanticSearch({ text, k = 12, dataset, sequence } = {}) {
+  ensureBase();
+  if (!text || !text.trim()) {
+    return { query: text ?? '', k, hits: [] };
   }
 
-  // mock mode (no backend yet)
-  await new Promise((r) => setTimeout(r, 500));
-  return [
-    {
-      id: 'mock-1',
-      title: `Result for "${query}" — red light near intersection`,
-      snippet: 'Vehicle approaches red light; pedestrian steps off curb.',
-      dataset: 'nuScenes',
-      thumbnailUrl: '',
-      timestampSec: 12,
-    },
-    {
-      id: 'mock-2',
-      title: `Result for "${query}" — cyclist overtaking on right`,
-      snippet: 'Cyclist passes vehicle; potential near-miss with opening door.',
-      dataset: 'Waymo',
-      thumbnailUrl: '',
-      timestampSec: 47,
-    },
-  ];
+  const params = new URLSearchParams();
+  params.set('text', text);
+  params.set('k', String(k));
+  if (dataset) params.set('dataset', dataset);
+  if (sequence) params.set('sequence', sequence);
+
+  const res = await fetch(`${API_BASE}/search?${params.toString()}`, {
+    method: 'GET',
+  });
+
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`Search failed: ${res.status} ${res.statusText} ${msg}`);
+  }
+
+  const data = await res.json(); // { query, k, hits: [...] }
+  const hits = (data.hits ?? []).map((h) => ({
+    ...h,
+    // make an absolute URL for <img src=...>
+    media_absolute_url: `${API_BASE}${h.media_url?.startsWith('/') ? '' : '/'}${
+      h.media_url
+    }`,
+  }));
+  return { ...data, hits };
 }
+
+// ---- Convenience helpers (optional) ----
+export async function listDatasets() {
+  ensureBase();
+  const r = await fetch(`${API_BASE}/datasets/`);
+  if (!r.ok) throw new Error(`datasets failed: ${r.status}`);
+  return r.json(); // [{id, slug, name, ...}]
+}
+
+export async function listSequences(datasetId) {
+  ensureBase();
+  const r = await fetch(`${API_BASE}/sequences/?dataset_id=${datasetId}`);
+  if (!r.ok) throw new Error(`sequences failed: ${r.status}`);
+  return r.json(); // [...]
+}
+
+// TEMP compatibility alias so old imports don't crash:
+export { semanticSearch as searchDatasets };

@@ -32,11 +32,11 @@ export default function SearchResults({ results, loading, error }) {
     );
   }
 
-  // Empty state (no results yet)
+  // Empty state
   if (!results || results.length === 0) {
     return (
       <div className="mt-9 max-w-3xl mx-auto text-center px-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-gary-500/10 to-slate-500/10 border border-white/10 mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-gray-500/10 to-slate-500/10 border border-white/10 mb-4">
           <Sparkles className="w-8 h-8 text-gray-400" />
         </div>
         <h3 className="text-xl font-semibold text-white mb-2">
@@ -68,10 +68,19 @@ export default function SearchResults({ results, loading, error }) {
 
       {/* Results grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {results.map((result, index) => (
+        {results.map((r, index) => (
           <ResultCard
-            key={result.id || `${result.title}-${index}`}
-            result={result}
+            key={r.frame_id ?? r.id ?? `${r.media_key}-${index}`}
+            result={{
+              // normalize to what ResultCard will use
+              imageUrl: r.media_absolute_url,
+              title: r.media_key,
+              subtitle: `${r.dataset ?? ''}${
+                r.sequence ? ` — ${r.sequence}` : ''
+              }`,
+              score: r.score,
+              raw: r, // keep the whole object if card needs more later
+            }}
             index={index}
           />
         ))}

@@ -1,14 +1,14 @@
-# Navis Backend (Latitude AI)
+# Navis Backend (Latitude AI - 2.4)
 
-End-to-end backend for semantic search over autonomous-driving datasets (nuScenes, KITTI).
-Stack: **FastAPI** (query API) · **CLIP** (text/image encoders) · **FAISS** (vector index) · **Redis Streams** (async bus) · **Postgres** (catalog) · **Google Drive** (object storage) · **BLIP / Qwen** (captions & summaries).
+End-to-end backend for semantic search over autonomous-driving datasets (KITTI, nuScenes, Argoverse).
+Stack: **FastAPI** (query API) · **CLIP** (text/image encoders) · **FAISS** (vector index) · **Postgres + pgvector** (catalog & embeddings) · **Google Drive** (object storage) · **YOLOv8** (object detection).
 
 > TL;DR flow:
 >
-> * **Workers** embed frames (images) from **Google Drive** with **CLIP** → publish vectors to Redis.
-> * **Caption worker** generates BLIP/Qwen captions and stores them in Postgres.
-> * **FAISS indexer** consumes vectors, updates the FAISS index, and writes periodic snapshots.
-> * **FastAPI** serves `/search`: encodes the text query with CLIP → FAISS top-K → Postgres join (+ optional Drive preview links + captions).
+> * **Workers** embed frames (images) from **Google Drive** with **CLIP** → store vectors in Postgres.
+> * **Object detection worker** runs YOLOv8 inference and stores bounding boxes in `frame_objects`.
+> * **FAISS indexer** builds index from Postgres embeddings for fast similarity search.
+> * **FastAPI** serves `/search`: encodes the text query with CLIP → FAISS top-K → Postgres join (+ Google Drive media URLs).
 
 ---
 
@@ -18,13 +18,12 @@ Stack: **FastAPI** (query API) · **CLIP** (text/image encoders) · **FAISS** (v
 * [Concepts & Responsibilities](#concepts--responsibilities)
 * [Installation](#installation)
 * [Configuration](#configuration)
-* [Running Locally (Docker Compose)](#running-locally-docker-compose)
-* [Data Contracts](#data-contracts)
+* [Running Locally](#running-locally)
+* [Data Schema](#data-schema)
 * [API Routes](#api-routes)
 * [Workers](#workers)
-* [Indexing & Snapshots](#indexing--snapshots)
-* [Captions & Summaries](#captions--summaries)
-* [Schema Notes](#schema-notes)
+* [FAISS Indexing](#faiss-indexing)
+* [Google Drive Integration](#google-drive-integration)
 * [Development Workflow](#development-workflow)
 * [Deployment Guide](#deployment-guide)
 * [Troubleshooting](#troubleshooting)
@@ -37,33 +36,29 @@ Stack: **FastAPI** (query API) · **CLIP** (text/image encoders) · **FAISS** (v
 backend/
   README.md
   .env.example
-  docker-compose.yml
-  pyproject.toml | requirements.txt
+  requirements.txt
   secrets/                 # (local only) service account; excluded from git
-    sa.json
-  src/
-    api/
-      __init__.py
-      main.py              # FastAPI entrypoint
-      routes_search.py     # /search (semantic search) & /admin/reload
-      deps.py              # (optional) shared FastAPI dependencies
-    common/
-      __init__.py
-      settings.py          # config loader for env vars
-      drive_storage.py     # Google Drive adapter (fileId -> PIL image/bytes)
-      db.py                # Postgres helpers (fetch frames/joins)
-      schema.py            # Pydantic models (request/response)
-      caption_runtime.py   # BLIP/Qwen runtime for captions/summaries
-    search/
-      __init__.py
-      clip_runtime.py      # CLIP text/image encoders (loaded once per process)
-      faiss_runtime.py     # Load latest FAISS snapshot & perform queries
-      snapshots/           # index_*.index + id_map_*.json (gitignored)
-    workers/
-      __init__.py
-      embed_worker.py      # Consume frame messages -> image embed -> publish vector
-      faiss_indexer.py     # Consume vectors -> update FAISS -> write snapshots
-      caption_worker.py    # Consume frames -> generate caption/summary -> store in DB
+    drive-key.json
+  app/
+    main.py               # FastAPI entrypoint
+  routes/
+    search.py             # /search (FAISS-powered semantic search)
+    media.py              # /media/gdrive/<path> (serve images from Drive)
+  services/
+    text_embed.py         # CLIP text encoder
+    drive.py              # Google Drive file resolution and download
+  db/
+    postgres.py           # Postgres connection helper
+    schema.sql            # Database schema (datasets, sequences, frames, embeddings, etc.)
+  workers/
+    embedder.py           # Batch embed frames with CLIP → store in Postgres
+    detector.py           # YOLOv8 object detection → store in frame_objects
+  scripts/
+    build_faiss_index.py  # Build FAISS index from Postgres embeddings
+    ingest_kitti.py       # Ingest KITTI dataset metadata
+  faiss_indexes/          # FAISS index files (gitignored)
+    kitti.index
+    kitti_mapping.npy
 ```
 
 ---
@@ -71,156 +66,202 @@ backend/
 ## Concepts & Responsibilities
 
 * **Google Drive (object storage)**
-  All media (images) live in Drive. We reference files by **`drive_file_id`**.
-  Each dataset row in `navis.datasets` stores `provider='gdrive'` and `media_base_uri='gdrive://<ROOT_FOLDER_ID>'`.
+  All media (images) live in Drive. Each dataset has a `media_base_uri` like `gdrive://<ROOT_FOLDER_ID>`.
+  Frames reference images via `media_key` (relative path like `image_00/data/0000000001.png`).
 
-* **Postgres (catalog DB)**
-  Structured metadata: `datasets`, `scenes`, `frames`, `annotations`, …
-  Each `frame` should have `drive_file_id`. Captions live in `auto_labels`; scene summaries (optional) in `scene_summaries`.
-
-* **Redis Streams (message bus)**
-
-  * `ingest.frames`: new frames to embed/caption (`frame_id`, `drive_file_id`)
-  * `vectors.new`: produced by `embed_worker` containing CLIP vector payloads
-  * (optional) `index.commands`: control messages for indexer
+* **Postgres (catalog + embeddings)**
+  Structured metadata: `datasets`, `sequences`, `frames`, `embeddings`, `frame_objects`.
+  CLIP embeddings stored as JSON arrays in `embeddings` table.
+  Object detections stored in `frame_objects` with bounding boxes and confidence scores.
 
 * **FAISS (vector index)**
-  In-memory index for cosine/inner-product similarity. Position→`frame_id` is tracked via `id_map`.
-  Indexer writes **snapshots** so the API can reload without recomputing.
+  In-memory index (`IndexFlatL2`) for fast similarity search.
+  Built from Postgres embeddings, with frame ID mapping stored in `.npy` file.
+  Loaded lazily on first search request.
 
 * **FastAPI (query service)**
-
-  * `/search`: text query → CLIP→ FAISS→ Postgres join (+ captions) → results
-  * `/admin/reload`: reload the newest FAISS snapshot (hot-swap)
+  * `/search`: text query → CLIP → FAISS → Postgres join → results
+  * `/media/gdrive/<path>`: serve images directly from Google Drive
 
 ---
 
 ## Installation
 
+### Python 3.11 Required
+
+**CRITICAL**: Use Python 3.11 (not 3.13) to avoid FAISS/SSL memory corruption issues.
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
+# Install Python 3.11
+brew install python@3.11
+
+# Create virtual environment
+python3.11 -m venv .venv-py311
+source .venv-py311/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
 **Core dependencies**:
 
 ```
-fastapi
-uvicorn[standard]
-redis
-faiss-cpu             # or faiss-gpu with CUDA
-torch
-transformers
-Pillow
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-auth-oauthlib
-psycopg2-binary
-python-dotenv
-pydantic
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+psycopg[binary]==3.1.13
+psycopg2-binary==2.9.9
+numpy>=1.25.0,<2.0
+torch==2.1.0
+torchvision==0.16.0
+pillow==10.1.0
+ftfy==6.1.1
+regex==2023.10.3
+google-auth==2.23.4
+google-auth-httplib2==0.1.1
+google-api-python-client==2.108.0
+clip @ git+https://github.com/openai/CLIP.git
+faiss-cpu==1.9.0.post1
+pydantic==2.5.0
+ultralytics==8.0.227
 ```
 
 ---
 
 ## Configuration
 
-Copy `.env.example` → `.env` and fill in values:
+### Environment Variables
+
+Create `.env.local`:
 
 ```env
-# App
-APP_ENV=dev
-PORT=8000
+# Backend URL
+NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
 
-# CLIP model + device
-CLIP_MODEL=openai/clip-vit-base-patch32
+# Postgres
+DATABASE_URL=postgresql://navis:password@localhost:5432/navis
+
+# Google Drive Service Account
+GOOGLE_APPLICATION_CREDENTIALS=backend/secrets/drive-key.json
+
+# CLIP Model
+CLIP_MODEL=ViT-B/32
 DEVICE=cpu
 
-# Redis
-REDIS_URL=redis://redis:6379/0
-
-# FAISS
-INDEX_SNAPSHOT_DIR=/data/faiss
-INDEX_DIM=512
-
-# Google Drive (Service Account JSON mounted in container)
-GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json
-
-# Postgres (used by API to join metadata)
-PG_DSN=postgresql://user:pass@postgres:5432/navis
-
-# Captions/Summaries
-CAPTION_MODEL=blip                 # blip | qwen
-CAPTION_MAX_TOKENS=48
-CAPTION_PROMPT=Brief caption.
-ENABLE_SCENE_SUMMARY=false
-SUMMARY_PROMPT=Summarize key objects and motion in 1-2 lines.
-CAPTION_STREAM=ingest.frames       # reuse or set to a dedicated 'ingest.captions'
+# OpenMP (required for FAISS on macOS)
+KMP_DUPLICATE_LIB_OK=TRUE
 ```
 
-> **Service account**: share dataset folders with the SA email. `secrets/sa.json` is mounted in Docker.
+### Google Drive Setup
 
----
+1. Create a service account in Google Cloud Console
+2. Download JSON key → save as `backend/secrets/drive-key.json`
+3. Share your Drive folders with the service account email (Viewer access)
+4. Copy folder IDs from Drive URLs
 
-## Running Locally (Docker Compose)
+### Postgres Setup
 
 ```bash
-docker compose up --build
-```
+# Install PostgreSQL
+brew install postgresql@14
 
-Services:
+# Start PostgreSQL
+brew services start postgresql@14
 
-* **api** → FastAPI at `http://localhost:8000`
-* **redis** → message bus
-* **embed_worker** → Drive → CLIP → vectors
-* **indexer** → FAISS add() + snapshot writer
-* **caption_worker** → Drive → BLIP/Qwen → store `auto_labels`
+# Create database
+createdb navis
 
-Quick smoke test:
-
-```python
-# add one message to ingest.frames
-import os, redis
-r = redis.Redis.from_url(os.getenv("REDIS_URL","redis://localhost:6379/0"))
-r.xadd("ingest.frames", {
-  "frame_id":"123e4567-e89b-12d3-a456-426614174000",
-  "drive_file_id":"<ACTUAL_DRIVE_FILE_ID>",
-  "ops":"embed,caption"   # optional hint; caption_worker will ignore if not present
-})
-```
-
-Then:
-
-```
-GET http://localhost:8000/search?q=red+car&k=20
+# Run schema
+psql navis < backend/db/schema.sql
 ```
 
 ---
 
-## Data Contracts
+## Running Locally
 
-### 1) `ingest.frames` (produced by ingestion/ETL)
+### Start Backend
 
-```json
-{
-  "frame_id": "uuid",
-  "drive_file_id": "string",
-  "ops": "embed,caption"   // optional; workers can check or ignore
-}
+```bash
+source .venv-py311/bin/activate
+export KMP_DUPLICATE_LIB_OK=TRUE
+python -m uvicorn backend.app.main:app --reload --reload-dir backend
 ```
 
-### 2) `vectors.new` (produced by `embed_worker`)
+Backend runs at `http://127.0.0.1:8000`
 
-```json
-{
-  "frame_id": "uuid",
-  "drive_file_id": "string",
-  "model": "openai/clip-vit-base-patch32",
-  "vector": "[float, float, ...]" // JSON-encoded list of float32
-}
+API docs at `http://127.0.0.1:8000/docs`
+
+### Ingest Dataset
+
+```bash
+# Ingest KITTI metadata
+python backend/scripts/ingest_kitti.py
+
+# Generate embeddings
+python backend/workers/embedder.py
+
+# Build FAISS index
+python backend/scripts/build_faiss_index.py
 ```
 
-*No new stream for captions by default — caption worker reads `ingest.frames` unless you set `CAPTION_STREAM`.*
+### Test Search
+
+```
+GET http://127.0.0.1:8000/search?text=cars+on+street&k=12
+```
+
+---
+
+## Data Schema
+
+### Core Tables
+
+```sql
+-- Datasets
+navis.datasets (
+  id SERIAL PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT,
+  provider TEXT,  -- 'gdrive'
+  media_base_uri TEXT  -- 'gdrive://<FOLDER_ID>'
+)
+
+-- Sequences (scenes)
+navis.sequences (
+  id SERIAL PRIMARY KEY,
+  dataset_id INT REFERENCES datasets(id),
+  scene_token TEXT,
+  name TEXT
+)
+
+-- Frames
+navis.frames (
+  id SERIAL PRIMARY KEY,
+  sequence_id INT REFERENCES sequences(id),
+  frame_idx INT,
+  timestamp TIMESTAMPTZ,
+  media_key TEXT  -- 'image_00/data/0000000001.png'
+)
+
+-- CLIP Embeddings
+navis.embeddings (
+  id SERIAL PRIMARY KEY,
+  frame_id INT REFERENCES frames(id),
+  model_id INT REFERENCES models(id),
+  emb TEXT  -- JSON array of 512 floats
+)
+
+-- Object Detections
+navis.frame_objects (
+  id SERIAL PRIMARY KEY,
+  frame_id INT REFERENCES frames(id),
+  object_type TEXT,  -- 'car', 'person', 'bicycle', etc.
+  confidence FLOAT,
+  bbox_x1 FLOAT,
+  bbox_y1 FLOAT,
+  bbox_x2 FLOAT,
+  bbox_y2 FLOAT
+)
+```
 
 ---
 
@@ -230,240 +271,331 @@ GET http://localhost:8000/search?q=red+car&k=20
 
 **Params**
 
-* `q` (string, required): text query
-* `k` (int, optional, default 20): number of results
-* optional filters (e.g., `dataset`, `split`, …) if implemented in `db.py`
+* `text` (string, required): natural language query
+* `k` (int, optional, default 12): number of results
+* `dataset` (string, optional): filter by dataset slug (e.g., 'kitti')
+* `sequence` (string, optional): filter by sequence/scene token
+* `objects` (string, optional): comma-separated object types (e.g., 'car,person')
 
 **Flow**
 
-1. Encode `q` with CLIP (text encoder) → 512-d vector
-2. FAISS `.search(q_vec, k)` → indices + scores
-3. Map indices → `frame_id` via `id_map`
-4. Join metadata in Postgres (`frames`, `scenes`, …)
-5. **Left-join latest caption** from `auto_labels` (if present)
-6. Return results *(with optional Drive thumbnail/share link if stored)*
+1. Encode query text with CLIP → 512-d vector
+2. FAISS `.search()` → top-K frame IDs by L2 distance
+3. Join metadata from Postgres (frames, sequences, datasets)
+4. Apply optional filters (dataset, sequence, objects)
+5. Build media URLs (`/media/gdrive/<media_key>`)
+6. Return ranked results
 
-**Response (example)**
+**Response**
 
 ```json
 {
-  "query": "red car turning left",
-  "results": [
+  "query": "cars on street",
+  "k": 12,
+  "hits": [
     {
-      "frame_id": "uuid",
-      "score": 0.74,
-      "dataset": "nuscenes",
-      "scene_id": "uuid",
-      "drive_file_id": "1AbC...xyz",
-      "title": "CAM_FRONT 000123",
-      "caption": "A red sedan turning left at an intersection.",
-      "ts": "2020-01-01T00:00:00Z",
-      "preview_url": "https://..."
+      "frame_id": 2437,
+      "score": 1.4447,
+      "media_key": "image_00/data/0000000033.png",
+      "media_url": "/media/gdrive/image_00/data/0000000033.png",
+      "dataset": "KITTI",
+      "sequence": "2011_09_26_drive_0001_sync"
     }
   ]
 }
 ```
 
-### `POST /admin/reload`
+### `GET /media/gdrive/<path>`
 
-Reload the newest FAISS snapshot from `search/snapshots/`.
+Serve images from Google Drive.
+
+**Example**: `http://127.0.0.1:8000/media/gdrive/image_00/data/0000000001.png`
+
+**Flow**
+
+1. Look up dataset `media_base_uri` from frame's `media_key`
+2. Resolve Drive path: `<ROOT_FOLDER_ID>` + `image_00/data/0000000001.png`
+3. Download file bytes from Drive API
+4. Return as PNG with caching headers
 
 ---
 
 ## Workers
 
-### `workers/embed_worker.py`
+### `workers/embedder.py`
 
-* **Consumes**: `ingest.frames`
-* **Does**:
+Batch process frames to generate CLIP embeddings.
 
-  * Fetch image via `drive_file_id` → `drive_storage.load_image_by_file_id`
-  * Compute CLIP image embedding → normalized vector
-  * Publish to `vectors.new`
+**Process**:
+1. Query frames without embeddings
+2. Download images from Google Drive (batch of 32)
+3. Encode with CLIP image encoder
+4. L2-normalize vectors
+5. Store in `navis.embeddings` as JSON
 
-### `workers/faiss_indexer.py`
-
-* **Consumes**: `vectors.new` (in batches)
-* **Does**:
-
-  * Normalize vectors (`faiss.normalize_L2`)
-  * `index.add(batch)` (IndexFlatIP for cosine similarity)
-  * Append `frame_id` to `id_map`
-  * Periodically write snapshots:
-
-    * `search/snapshots/index_<ts>.index`
-    * `search/snapshots/id_map_<ts>.json`
-
-### `workers/caption_worker.py`  *(new)*
-
-* **Consumes**: `ingest.frames` (or `CAPTION_STREAM`)
-* **Does**:
-
-  * Fetch image via `drive_file_id` → `drive_storage.load_image_by_file_id`
-  * Generate **caption** with **BLIP** (fast) or **Qwen2.5-VL-3B-Instruct** (richer)
-  * Write to `auto_labels(frame_id, model, text, score?)`
-  * (Optional) Aggregate and write `scene_summaries` per scene
-
-> Runtime choice via `CAPTION_MODEL=blip|qwen`. Keep captions short (`CAPTION_MAX_TOKENS`) for speed.
-
----
-
-## Indexing & Snapshots
-
-* **Index type**: `IndexFlatIP` (cosine via L2-normalized vectors).
-  For large datasets, consider IVF/HNSW with a training pass.
-* **Reloading**: API loads the **newest** snapshot at startup; use `/admin/reload` to hot-swap.
-* **Persistence**: snapshots live under `INDEX_SNAPSHOT_DIR` (mounted volume in Docker).
-
----
-
-## Captions & Summaries
-
-### Why offline (worker) instead of query-time
-
-Captioning/summary is compute-heavy. We run it **once** per frame/scene and store outputs for fast reads and consistent UX.
-
-### Models
-
-* **BLIP** – `Salesforce/blip-image-captioning-base`
-
-  * Best for bulk, fast captions (short descriptive text)
-* **Qwen** – `Qwen/Qwen2.5-VL-3B-Instruct`
-
-  * Richer descriptions or 1–2 line **scene summaries** (slower)
-
-### API inclusion
-
-* `/search` returns `caption` when available (latest by `created_at`, or by preferred `model` if you add that policy).
-
----
-
-## Schema Notes
-
-Minimum helpful tables (simplified):
-
-```sql
--- datasets
-CREATE TABLE datasets (
-  id uuid primary key,
-  slug text unique not null,
-  provider text not null,             -- 'gdrive'
-  media_base_uri text                 -- 'gdrive://<ROOT_FOLDER_ID>'
-);
-
--- scenes
-CREATE TABLE scenes (
-  id uuid primary key,
-  dataset_id uuid not null references datasets(id),
-  split text,
-  start_ts timestamptz,
-  end_ts timestamptz,
-  location text
-);
-
--- frames
-CREATE TABLE frames (
-  id uuid primary key,
-  scene_id uuid not null references scenes(id),
-  index int,
-  ts timestamptz,
-  modality text,
-  title text,
-  drive_file_id text,                 -- **critical** for Drive fetch
-  relative_path text                  -- optional (debug)
-);
-
--- auto-generated frame captions
-CREATE TABLE IF NOT EXISTS auto_labels (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  frame_id uuid NOT NULL REFERENCES frames(id),
-  model text NOT NULL,                -- 'blip' or 'qwen2.5-vl-3b-instruct'
-  text  text NOT NULL,
-  score float,                        -- optional
-  created_at timestamptz DEFAULT now()
-);
-
--- optional per-scene summaries
-CREATE TABLE IF NOT EXISTS scene_summaries (
-  scene_id uuid PRIMARY KEY REFERENCES scenes(id),
-  model text NOT NULL,
-  summary text NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
+**Usage**:
+```bash
+python backend/workers/embedder.py
 ```
+
+### `workers/detector.py`  *(Optional)*
+
+Run YOLOv8 object detection on frames.
+
+**Process**:
+1. Load frames from Postgres
+2. Download images from Drive
+3. Run YOLOv8 inference
+4. Store detections in `navis.frame_objects`
+
+**Usage**:
+```bash
+python backend/workers/detector.py
+```
+
+---
+
+## FAISS Indexing
+
+### Building the Index
+
+```bash
+python backend/scripts/build_faiss_index.py
+```
+
+**Process**:
+1. Read all embeddings from Postgres for dataset
+2. Convert JSON strings to numpy arrays (N × 512)
+3. Build `IndexFlatL2` (L2 distance, works with normalized vectors)
+4. Save index file: `backend/faiss_indexes/kitti.index`
+5. Save frame ID mapping: `backend/faiss_indexes/kitti_mapping.npy`
+
+**Output**:
+```
+✅ Found 540 embeddings
+Embeddings shape: (540, 512)
+✅ Built FAISS index with 540 vectors
+✅ Saved FAISS index to: backend/faiss_indexes/kitti.index
+✅ Saved frame ID mapping to: backend/faiss_indexes/kitti_mapping.npy
+```
+
+### Index Loading
+
+FAISS index is loaded **lazily** on first search request to avoid import-time crashes.
+
+```python
+# In backend/routes/search.py
+def load_faiss_index():
+    global _faiss_index, _frame_id_mapping
+    if _faiss_index is not None:
+        return  # Already loaded
+    
+    import faiss  # Lazy import
+    _faiss_index = faiss.read_index(str(FAISS_INDEX_PATH))
+    _frame_id_mapping = np.load(str(FAISS_MAPPING_PATH))
+```
+
+---
+
+## Google Drive Integration
+
+### Service Account Permissions
+
+1. Go to Google Cloud Console → IAM & Admin → Service Accounts
+2. Create service account → download JSON key
+3. Share Drive folders with service account email (Viewer access)
+
+### Path Resolution
+
+Drive paths are resolved hierarchically:
+
+```python
+# Example: image_00/data/0000000001.png
+# Root: 1vHWntmgJZ7Y-GAdeqGRp3mELUJis9U5e
+# 
+# Resolution:
+# 1. Find folder "image_00" in root
+# 2. Find folder "data" in "image_00"
+# 3. Find file "0000000001.png" in "data"
+```
+
+Results are cached with `@lru_cache` to avoid repeated API calls.
+
+### Rate Limiting
+
+Google Drive API has rate limits. Current configuration:
+
+* `ThreadPoolExecutor(max_workers=1)` - serial downloads to avoid SSL errors
+* Retry logic with exponential backoff (3 attempts)
+* Cache-Control headers for browser caching
+
+**For production**, migrate to Google Cloud Storage or CDN.
 
 ---
 
 ## Development Workflow
 
-1. **Add dataset roots**
+### Adding a New Dataset
 
-   * Put media in Drive (nuScenes/KITTI) and share with the service account.
-   * Save folder ID in `datasets.media_base_uri` (`gdrive://<FOLDER_ID>`).
+1. **Upload to Google Drive**
+   - Organize as: `<dataset>/image_XX/data/*.png`
+   - Share folder with service account
 
-2. **Backfill frames**
+2. **Ingest Metadata**
+   ```python
+   # Create backend/scripts/ingest_<dataset>.py
+   # Insert dataset, sequences, frames
+   ```
 
-   * Ensure each frame row has `drive_file_id`.
-   * Use a backfill script if you need path→fileId mapping.
+3. **Generate Embeddings**
+   ```bash
+   python backend/workers/embedder.py
+   ```
 
-3. **Run workers**
+4. **Build FAISS Index**
+   ```bash
+   python backend/scripts/build_faiss_index.py
+   ```
 
-   * Send messages to `ingest.frames`.
-   * `embed_worker` emits `vectors.new`.
-   * `faiss_indexer` writes snapshots.
-   * `caption_worker` writes `auto_labels`.
+5. **Test Search**
+   ```
+   GET /search?text=your+query
+   ```
 
-4. **Search**
+### Adding Object Detection
 
-   * Start API → `GET /search?q=...` (returns captions if present).
+1. Run detector worker:
+   ```bash
+   python backend/workers/detector.py
+   ```
 
-5. **Reload**
-
-   * `POST /admin/reload` after new snapshots.
+2. Query with object filter:
+   ```
+   GET /search?text=intersection&objects=car,person
+   ```
 
 ---
 
 ## Deployment Guide
 
-Use any container platform: **Render**, **Fly.io**, **GCP Cloud Run**, **Railway**, **ECS/Fargate**.
+### Production Checklist
 
-* **Public**: `api` (expose HTTPS)
-* **Private**: `embed_worker`, `caption_worker`, `faiss_indexer`, `redis`
-* **Secrets**: store `.env` and `sa.json` in platform secret manager
-* **Volumes**: mount a persistent volume for `INDEX_SNAPSHOT_DIR`
+- [ ] **Use Python 3.11** (not 3.13)
+- [ ] **Set environment variable**: `KMP_DUPLICATE_LIB_OK=TRUE`
+- [ ] **Migrate from Google Drive to GCS/S3** for image storage
+- [ ] **Add CDN** (CloudFlare, CloudFront) for media serving
+- [ ] **Use managed Postgres** (Supabase, RDS, Cloud SQL)
+- [ ] **Increase FAISS workers** to max_workers=4+ once on GCS
+- [ ] **Monitor rate limits** on Google Drive API
 
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY backend/ backend/
+ENV KMP_DUPLICATE_LIB_OK=TRUE
+
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### Render/Railway Deployment
+
+```yaml
+# render.yaml
+services:
+  - type: web
+    name: navis-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: KMP_DUPLICATE_LIB_OK
+        value: "TRUE"
+      - key: PYTHON_VERSION
+        value: "3.11"
+```
 
 ---
 
 ## Troubleshooting
 
-* **No results / empty search**
+### Memory Corruption / Segfault
 
-  * Check snapshots exist under `search/snapshots/`.
-  * Ensure `embed_worker` is producing `vectors.new`.
+**Symptom**: `malloc: Incorrect checksum for freed object`
 
-* **Captions missing**
+**Cause**: Python 3.13 + FAISS + concurrent SSL connections
 
-  * Confirm `caption_worker` is running and has GPU/CPU resources.
-  * Verify `auto_labels` rows exist for those `frame_id`s.
+**Fix**: 
+1. Use Python 3.11 (not 3.13)
+2. Set `export KMP_DUPLICATE_LIB_OK=TRUE`
+3. Reduce `max_workers=1` in media route
 
-* **Drive fetch failures**
+### Images Not Loading
 
-  * Make sure the dataset folder is shared with the **service account**.
-  * Ensure each frame has a valid `drive_file_id`.
+**Symptom**: 404 or 500 errors on `/media/gdrive/<path>`
 
-* **Index not updating**
+**Fixes**:
+1. Verify service account has Viewer access to Drive folder
+2. Check `media_base_uri` in database matches Drive folder ID
+3. Restart backend to clear Drive path cache
+4. Wait 1-2 minutes after sharing folder (permissions propagation)
 
-  * Ensure `faiss_indexer` is consuming `vectors.new`.
-  * Check Redis groups/consumer IDs; clear stalled pending entries if needed.
+### Search Returns No Results
 
-* **Slow search**
+**Fixes**:
+1. Check FAISS index exists: `ls backend/faiss_indexes/`
+2. Verify embeddings in database: `SELECT COUNT(*) FROM navis.embeddings;`
+3. Rebuild FAISS index: `python backend/scripts/build_faiss_index.py`
+4. Restart backend to reload index
 
-  * Use cosine/IP with normalized vectors (already).
-  * For scale, switch to IVF/HNSW and tune params.
+### SSL/Connection Errors
+
+**Symptom**: `[SSL] record layer failure`
+
+**Cause**: Too many concurrent Google Drive downloads
+
+**Fixes**:
+1. Reduce `max_workers` in `backend/routes/media.py`
+2. Increase frontend stagger delay (already 500ms)
+3. Migrate to Google Cloud Storage for production
+
+### FAISS Index Out of Sync
+
+**Symptom**: Search returns wrong frames or errors
+
+**Fix**: Rebuild index after adding/removing frames
+```bash
+python backend/scripts/build_faiss_index.py
+# Restart backend
+```
 
 ---
 
-### Maintainers
+## Performance Notes
 
-* PRs: include a brief summary and logs/screenshots if you touched workers, FAISS, or captions.
+### Current Limitations (with Google Drive)
+
+* **540 frames**: Search works well
+* **5,000+ frames**: Drive rate limits become problematic
+* **50,000+ frames**: Must migrate to GCS/S3
+
+### Production Recommendations
+
+1. **Image Storage**: Google Cloud Storage ($0.020/GB/month)
+2. **CDN**: CloudFlare (free tier) or CloudFront
+3. **FAISS**: Use IVF index for 100K+ frames
+4. **Caching**: Redis for Drive path resolution
+5. **Database**: Connection pooling (pgBouncer)
+
+---
+
+## Maintainers
+
+* PRs: include tests for new routes/workers
+* Update this README when adding new features
+* Tag releases when deploying to production

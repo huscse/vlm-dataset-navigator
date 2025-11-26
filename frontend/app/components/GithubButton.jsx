@@ -7,7 +7,7 @@ export default function GitHubButton() {
       provider: 'github',
       options: {
         redirectTo: 'https://vlm-dataset-navigator-frontend.vercel.app/header',
-        scopes: 'read:user user:email', // default is fine, this is optional
+        scopes: 'read:user user:email', 
       },
     });
   };

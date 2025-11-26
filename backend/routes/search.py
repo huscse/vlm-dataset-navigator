@@ -14,8 +14,8 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 # Load FAISS index on startup
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-FAISS_INDEX_PATH = BACKEND_ROOT / "faiss_indexes" / "kitti.index"
-FAISS_MAPPING_PATH = BACKEND_ROOT / "faiss_indexes" / "kitti_mapping.npy"
+FAISS_INDEX_PATH = BACKEND_ROOT / "faiss_indexes" / "combined.index"
+FAISS_MAPPING_PATH = BACKEND_ROOT / "faiss_indexes" / "combined_mapping.npy"
 
 # Global variables for FAISS index
 _faiss_index = None
@@ -67,7 +67,7 @@ def _media_url(media_base_uri: Optional[str], media_key: str) -> str:
 @router.get("", response_model=SearchResponse, summary="Semantic search over frames (FAISS-powered)")
 def search(
     q: str = Query(..., alias="text", description="Natural language query"),
-    k: int = Query(12, ge=1, le=100, description="Top-K results"),
+    k: int = Query(50, ge=1, le=100, description="Top-K results"),
     dataset: Optional[str] = Query(None, description="Dataset slug filter (e.g. 'kitti')"),
     sequence: Optional[str] = Query(None, description="Sequence name/scene filter"),
     objects: Optional[str] = Query(None, description="Comma-separated object types to filter (e.g., 'car,person')"),
@@ -81,9 +81,47 @@ def search(
     qvec = get_text_embedding(q)  # returns list[float] of length 512
     qvec_np = np.array([qvec], dtype=np.float32)  # shape (1, 512)
     
-    # 2) Search FAISS index for nearest neighbors
-    # Get more results than k to allow for filtering
-    search_k = min(k * 3, _faiss_index.ntotal)
+    # 2) Determine search multiplier based on filters
+    # Calculate how many candidates to fetch to ensure we get k results after filtering
+    multiplier = 3  # Default: fetch 3x results for ranking flexibility
+    
+    if dataset or sequence or objects:
+        # When filtering, estimate selectivity and increase multiplier accordingly
+        # This is more scalable than hardcoded multipliers
+        with get_conn() as conn, conn.cursor() as cur:
+            # Get total frame count and filtered count to estimate selectivity
+            filter_sql = "SELECT COUNT(*) as count FROM navis.frames f JOIN navis.sequences s ON s.id = f.sequence_id JOIN navis.datasets d ON d.id = s.dataset_id WHERE 1=1"
+            filter_params = []
+            
+            if dataset:
+                filter_sql += " AND d.slug = %s"
+                filter_params.append(dataset)
+            
+            if sequence:
+                filter_sql += " AND s.scene_token = %s"
+                filter_params.append(sequence)
+            
+            if objects:
+                object_list = [obj.strip() for obj in objects.split(',')]
+                placeholders_obj = ','.join(['%s'] * len(object_list))
+                filter_sql += f" AND EXISTS (SELECT 1 FROM navis.frame_objects fo WHERE fo.frame_id = f.id AND fo.object_type IN ({placeholders_obj}) AND fo.confidence > 0.5)"
+                filter_params.extend(object_list)
+            
+            cur.execute(filter_sql, filter_params)
+            filtered_count = cur.fetchone()[0]
+            
+            # Calculate selectivity ratio (what % of total frames pass filter)
+            total_count = _faiss_index.ntotal
+            selectivity = filtered_count / total_count if total_count > 0 else 1.0
+            
+            # Dynamic multiplier: fetch enough candidates to get k results
+            # Example: if only 10% match filter, need 10x multiplier
+            if selectivity > 0:
+                multiplier = max(3, int(1 / selectivity) + 1)
+            else:
+                multiplier = total_count  # Fetch everything if filter matches nothing
+    
+    search_k = min(k * multiplier, _faiss_index.ntotal)
     distances, indices = _faiss_index.search(qvec_np, search_k)
     
     # 3) Map FAISS indices back to frame IDs
