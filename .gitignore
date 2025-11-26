@@ -48,3 +48,8 @@ node_modules/
 tests/
 jest.config.js
 .DS_Store
+.DS_Store
+backend/workers/embedder.py.backup
+requirements.txt.backup
+
+pgdata/
