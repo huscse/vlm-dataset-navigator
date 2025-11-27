@@ -39,11 +39,13 @@ def load_faiss_index():
 
 class SearchHit(BaseModel):
     frame_id: int
-    score: float               # L2 distance from FAISS
+    score: float
     media_key: str
-    media_url: str             
+    media_url: str
     dataset: str
     sequence: str
+    sensor: str              # ADD THIS
+    frame_number: str        # ADD THIS
 
 class SearchResponse(BaseModel):
     query: str
@@ -131,13 +133,16 @@ def search(
     # 4) Fetch metadata from Postgres and apply filters
     placeholders = ','.join(['%s'] * len(candidate_frame_ids))
     
+
     sql = f"""
     SELECT
       f.id        AS frame_id,
       f.media_key AS media_key,
+      f.sample_token AS sample_token,
       d.slug      AS dataset_slug,
       d.name      AS dataset_name,
       s.scene_token AS sequence_name,
+      s.sensor    AS sensor,
       d.media_base_uri AS media_base_uri
     FROM navis.frames f
     JOIN navis.sequences s ON s.id = f.sequence_id
@@ -184,6 +189,7 @@ def search(
     for frame_id in candidate_frame_ids:
         if frame_id in frame_id_to_row:
             r = frame_id_to_row[frame_id]
+
             hits.append(
                 SearchHit(
                     frame_id=r['frame_id'],
@@ -192,6 +198,8 @@ def search(
                     media_url=_media_url(r['media_base_uri'], r['media_key']),
                     dataset=r['dataset_name'] or r['dataset_slug'],
                     sequence=r['sequence_name'],
+                    sensor=r['sensor'] or 'N/A',
+                    frame_number=r['sample_token'] or str(r['frame_id']),
                 )
             )
             if len(hits) >= k:
