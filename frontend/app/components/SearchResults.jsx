@@ -72,14 +72,18 @@ export default function SearchResults({ results, loading, error }) {
           <ResultCard
             key={r.frame_id ?? r.id ?? `${r.media_key}-${index}`}
             result={{
-              // normalize to what ResultCard will use
+              // Pass all metadata fields directly
               imageUrl: r.media_absolute_url,
+              thumbnailUrl: r.absUrl || r.media_url,
               title: r.media_key,
-              subtitle: `${r.dataset ?? ''}${
-                r.sequence ? ` — ${r.sequence}` : ''
-              }`,
+              dataset: r.dataset,
+              sequence: r.sequence,
+              sensor: r.sensor,
+              frame_number: r.frame_number,
+              frame_id: r.frame_id,
               score: r.score,
-              raw: r, // keep the whole object if card needs more later
+              caption: r.caption,
+              raw: r,
             }}
             index={index}
           />

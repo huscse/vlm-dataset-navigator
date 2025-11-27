@@ -39,7 +39,6 @@ export default function Header({ initialQuery }) {
     setError(null);
     setLoading(true);
 
-    // Update URL with query (client-side)
     if (updateUrl) {
       const url = new URL(window.location.href);
       url.searchParams.set('q', query);
@@ -47,13 +46,50 @@ export default function Header({ initialQuery }) {
     }
 
     try {
-      const data = await semanticSearch({ text: query, k: 12 });
-      setResults(data.hits || []);
+      const data = await semanticSearch({ text: query, k: 8 });
+      const hits = data.hits || [];
+
+      // Show results immediately with placeholder captions
+      const hitsWithPlaceholders = hits.map((h) => ({
+        ...h,
+        caption: 'Generating summaries...',
+      }));
+      setResults(hitsWithPlaceholders);
+      setLoading(false); // Stop loading spinner - users can see results now!
+
+      // Fetch captions in background (non-blocking)
+      if (hits.length > 0) {
+        const frameIds = hits.map((h) => h.frame_id);
+        const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+        fetch(`${BACKEND}/caption/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ frame_ids: frameIds }),
+        })
+          .then((res) => res.json())
+          .then((captionData) => {
+            // Update with actual captions when ready
+            const hitsWithCaptions = hits.map((h) => {
+              const captionObj = captionData.captions.find(
+                (c) => c.frame_id === h.frame_id,
+              );
+              return {
+                ...h,
+                caption: captionObj?.caption || 'No description available',
+                captionError: captionObj?.error || null,
+              };
+            });
+            setResults(hitsWithCaptions);
+          })
+          .catch((err) => {
+            console.error('Caption generation failed:', err);
+          });
+      }
     } catch (err) {
       console.error('Search failed', err);
       setError(err.message || 'Search failed. Please try again.');
       setResults([]);
-    } finally {
       setLoading(false);
     }
   };

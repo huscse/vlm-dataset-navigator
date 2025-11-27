@@ -1,33 +1,50 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Database, Image as ImageIcon } from 'lucide-react';
+import {
+  Database,
+  Image as ImageIcon,
+  Video,
+  Camera,
+  Hash,
+  X,
+  ZoomIn,
+  FileText,
+} from 'lucide-react';
 
 export default function ResultCard({ result, index }) {
   const [shouldLoad, setShouldLoad] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
-  // Stagger image loading: load in batches of 3
   useEffect(() => {
-    const delay = Math.floor(index / 3) * 500; // 0ms, 500ms, 1000ms, 1500ms...
+    const delay = Math.floor(index / 3) * 500;
     const timer = setTimeout(() => setShouldLoad(true), delay);
     return () => clearTimeout(timer);
   }, [index]);
 
   const rawSrc = result.imageUrl || result.thumbnailUrl;
   const imgSrc = rawSrc ? encodeURI(rawSrc) : null;
-  const title = result.title || 'Untitled Scene';
-  const datasetLabel =
-    result.dataset ?? result.raw?.dataset ?? 'Unknown dataset';
+  const title = `Frame ${index + 1}`;
+
+  const dataset = result.dataset || 'Unknown';
+  const sequence = result.sequence || 'N/A';
+
+  // Format sensor name for better display
+  const sensorDisplay = result.sensor
+    ? result.sensor.replace('image_', 'Camera ').replace(/_/g, ' ')
+    : 'N/A';
+
+  const frameNumber = result.frame_number || result.frame_id || 'N/A';
+  const score = result.score ? result.score.toFixed(3) : 'N/A';
+  const caption = result.caption || '';
 
   const handleImageError = (e) => {
     if (retryCount < 2) {
-      // Retry up to 2 times with exponential backoff
-      const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s
+      const retryDelay = Math.pow(2, retryCount) * 1000;
       setTimeout(() => {
         setRetryCount((prev) => prev + 1);
-        // Force reload by changing src
         e.currentTarget.src = imgSrc + '?retry=' + (retryCount + 1);
       }, retryDelay);
     } else {
@@ -37,60 +54,165 @@ export default function ResultCard({ result, index }) {
   };
 
   return (
-    <article className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl overflow-hidden hover:from-white/10 hover:to-white/5 hover:border-white/20 hover:shadow-xl hover:shadow-black/20 transition-all duration-300 group cursor-pointer">
-      {/* Thumbnail */}
-      <div className="relative h-48 overflow-hidden bg-gray-900/50">
-        {imgSrc && shouldLoad && !imgError ? (
-          <>
+    <>
+      <article
+        className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl overflow-hidden hover:from-white/10 hover:to-white/5 hover:border-white/20 hover:shadow-xl hover:shadow-black/20 transition-all duration-300 group cursor-pointer"
+        onClick={() => setShowModal(true)}
+      >
+        {/* Thumbnail */}
+        <div className="relative h-48 overflow-hidden bg-gray-900/50">
+          {imgSrc && shouldLoad && !imgError ? (
+            <>
+              <img
+                src={imgSrc}
+                alt={title}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                loading="lazy"
+                onError={handleImageError}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+              {/* Zoom icon on hover */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="bg-black/70 text-white p-3 rounded-full backdrop-blur-sm">
+                  <ZoomIn className="w-6 h-6" />
+                </div>
+              </div>
+
+              {retryCount > 0 && (
+                <div className="absolute top-2 right-2 bg-yellow-500/80 text-xs px-2 py-1 rounded">
+                  Retrying...
+                </div>
+              )}
+
+              {/* Similarity Score Badge */}
+              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md backdrop-blur-sm">
+                Score: {score}
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-600">
+              {!shouldLoad ? (
+                <div className="w-8 h-8 border-2 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
+              ) : (
+                <>
+                  <ImageIcon className="w-12 h-12 mb-2 opacity-30" />
+                  <span className="text-sm">
+                    {imgError ? 'Failed to load' : 'No preview available'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Content with Metadata */}
+        <div className="p-5">
+          <h3 className="text-base font-semibold text-white mb-3 line-clamp-1 group-hover:text-gray-300 transition-colors">
+            {title}
+          </h3>
+
+          {/* Caption - NEW */}
+          {caption && (
+            <div className="mb-3 pb-3 border-b border-white/10">
+              <div className="flex items-start gap-2">
+                <FileText className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-gray-300 leading-relaxed line-clamp-2 italic">
+                  {caption}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata Grid */}
+          <div className="space-y-2">
+            {/* Dataset */}
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              <span className="text-xs text-gray-400">Dataset:</span>
+              <span className="text-sm text-white font-medium truncate">
+                {dataset}
+              </span>
+            </div>
+
+            {/* Sequence */}
+            <div className="flex items-center gap-2">
+              <Video className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <span className="text-xs text-gray-400">Sequence:</span>
+              <span className="text-sm text-white truncate">{sequence}</span>
+            </div>
+
+            {/* Sensor */}
+            <div className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-purple-400 flex-shrink-0" />
+              <span className="text-xs text-gray-400">Sensor:</span>
+              <span className="text-sm text-white truncate">
+                {sensorDisplay}
+              </span>
+            </div>
+
+            {/* Frame Number */}
+            <div className="flex items-center gap-2">
+              <Hash className="w-4 h-4 text-orange-400 flex-shrink-0" />
+              <span className="text-xs text-gray-400">Frame:</span>
+              <span className="text-sm text-white truncate">{frameNumber}</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      {/* Full-size Image Modal - Fixed positioning */}
+      {showModal && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-10"
+            onClick={() => setShowModal(false)}
+          >
+            <X className="w-8 h-8" />
+          </button>
+
+          <div className="max-w-7xl w-full flex flex-col items-center gap-4">
+            {/* Image */}
             <img
               src={imgSrc}
               alt={title}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-              loading="lazy"
-              onError={handleImageError}
+              className="max-h-[70vh] w-auto object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            {retryCount > 0 && (
-              <div className="absolute top-2 right-2 bg-yellow-500/80 text-xs px-2 py-1 rounded">
-                Retrying...
+
+            {/* Metadata overlay - Fixed to not overlap */}
+            <div className="w-full max-w-4xl bg-black/80 text-white p-4 rounded-lg backdrop-blur-sm border border-white/10">
+              <h3 className="text-lg font-semibold mb-3">{title}</h3>
+
+              {/* Caption in modal */}
+              {caption && (
+                <p className="text-sm text-gray-300 mb-3 pb-3 border-b border-white/10 italic">
+                  "{caption}"
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-400">Dataset:</span> {dataset}
+                </div>
+                <div>
+                  <span className="text-gray-400">Sequence:</span>
+                  <span className="block truncate">{sequence}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Sensor:</span> {sensorDisplay}
+                </div>
+                <div>
+                  <span className="text-gray-400">Score:</span> {score}
+                </div>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-gray-600">
-            {!shouldLoad ? (
-              <div className="w-8 h-8 border-2 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
-            ) : (
-              <>
-                <ImageIcon className="w-12 h-12 mb-2 opacity-30" />
-                <span className="text-sm">
-                  {imgError ? 'Failed to load' : 'No preview available'}
-                </span>
-              </>
-            )}
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="p-5">
-        <h3 className="text-base font-semibold text-white mb-2 line-clamp-2 group-hover:text-gray-300 transition-colors">
-          {title}
-        </h3>
-
-        {result.snippet && (
-          <p className="text-s text-gray-200 mb-4 line-clamp-3 leading-relaxed">
-            {result.snippet}
-          </p>
-        )}
-
-        <div className="flex items-center gap-2 pt-3 border-t border-white/5">
-          <Database className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-          <span className="text-s text-white font-bold truncate">
-            {datasetLabel}
-          </span>
         </div>
-      </div>
-    </article>
+      )}
+    </>
   );
 }
