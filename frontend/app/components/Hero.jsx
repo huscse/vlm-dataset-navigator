@@ -1,16 +1,29 @@
+'use client';
+
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthSession } from '../lib/useAuthSession';
 
 const Hero = () => {
   const router = useRouter();
+  const { session, loading } = useAuthSession();
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   const handleTransition = (path) => {
     setIsTransitioning(true);
-    // For smoother transition, delay navigation
     setTimeout(() => {
       router.push(path);
     }, 400);
+  };
+
+  const handleGetStarted = () => {
+    if (session) {
+      // If signed in, go to search
+      handleTransition('/header');
+    } else {
+      // If not signed in, go to sign in
+      handleTransition('/signin');
+    }
   };
 
   return (
@@ -40,11 +53,15 @@ const Hero = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => handleTransition('/header')}
-                disabled={isTransitioning}
+                onClick={handleGetStarted}
+                disabled={isTransitioning || loading}
                 className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-lg font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
               >
-                Get Started
+                {loading
+                  ? 'Loading...'
+                  : session
+                  ? 'Go to Search'
+                  : 'Get Started'}
               </button>
               <button
                 onClick={() => handleTransition('/about')}
