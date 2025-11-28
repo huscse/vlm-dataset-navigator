@@ -10,13 +10,21 @@ import {
   X,
   ZoomIn,
   FileText,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
+import { useAuthSession } from '../lib/useAuthSession';
+import { addBookmark, removeBookmark, isBookmarked } from '../lib/bookmarks';
 
 export default function ResultCard({ result, index }) {
   const [shouldLoad, setShouldLoad] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [imgError, setImgError] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  const { session } = useAuthSession();
 
   useEffect(() => {
     const delay = Math.floor(index / 3) * 500;
@@ -24,18 +32,22 @@ export default function ResultCard({ result, index }) {
     return () => clearTimeout(timer);
   }, [index]);
 
+  // Check if bookmarked on mount
+  useEffect(() => {
+    if (session && result.frame_id) {
+      isBookmarked(result.frame_id).then(setBookmarked);
+    }
+  }, [session, result.frame_id]);
+
   const rawSrc = result.imageUrl || result.thumbnailUrl;
   const imgSrc = rawSrc ? encodeURI(rawSrc) : null;
   const title = `Frame ${index + 1}`;
 
   const dataset = result.dataset || 'Unknown';
   const sequence = result.sequence || 'N/A';
-
-  // Format sensor name for better display
   const sensorDisplay = result.sensor
     ? result.sensor.replace('image_', 'Camera ').replace(/_/g, ' ')
     : 'N/A';
-
   const frameNumber = result.frame_number || result.frame_id || 'N/A';
   const score = result.score ? result.score.toFixed(3) : 'N/A';
   const caption = result.caption || '';
@@ -50,6 +62,40 @@ export default function ResultCard({ result, index }) {
     } else {
       setImgError(true);
       e.currentTarget.src = '';
+    }
+  };
+
+  const handleBookmarkToggle = async (e) => {
+    e.stopPropagation(); // Prevent modal from opening
+
+    if (!session) {
+      alert('Please sign in to bookmark frames');
+      return;
+    }
+
+    setBookmarkLoading(true);
+    try {
+      if (bookmarked) {
+        await removeBookmark(result.frame_id);
+        setBookmarked(false);
+      } else {
+        await addBookmark({
+          frame_id: result.frame_id,
+          dataset: result.dataset,
+          sequence: result.sequence,
+          sensor: result.sensor,
+          frame_number: result.frame_number,
+          caption: result.caption,
+          imageUrl: result.imageUrl || result.thumbnailUrl,
+          score: result.score,
+        });
+        setBookmarked(true);
+      }
+    } catch (error) {
+      console.error('Bookmark error:', error);
+      alert('Failed to update bookmark');
+    } finally {
+      setBookmarkLoading(false);
     }
   };
 
@@ -79,8 +125,23 @@ export default function ResultCard({ result, index }) {
                 </div>
               </div>
 
+              {/* Bookmark Button - Top Right */}
+              {session && (
+                <button
+                  onClick={handleBookmarkToggle}
+                  disabled={bookmarkLoading}
+                  className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 text-white p-2 rounded-full backdrop-blur-sm transition-all duration-200 hover:scale-110 disabled:opacity-50"
+                >
+                  {bookmarked ? (
+                    <BookmarkCheck className="w-5 h-5 text-yellow-400" />
+                  ) : (
+                    <Bookmark className="w-5 h-5" />
+                  )}
+                </button>
+              )}
+
               {retryCount > 0 && (
-                <div className="absolute top-2 right-2 bg-yellow-500/80 text-xs px-2 py-1 rounded">
+                <div className="absolute bottom-2 right-2 bg-yellow-500/80 text-xs px-2 py-1 rounded">
                   Retrying...
                 </div>
               )}
@@ -112,7 +173,7 @@ export default function ResultCard({ result, index }) {
             {title}
           </h3>
 
-          {/* Caption - NEW */}
+          {/* Caption */}
           {caption && (
             <div className="mb-3 pb-3 border-b border-white/10">
               <div className="flex items-start gap-2">
@@ -126,7 +187,6 @@ export default function ResultCard({ result, index }) {
 
           {/* Metadata Grid */}
           <div className="space-y-2">
-            {/* Dataset */}
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-blue-400 flex-shrink-0" />
               <span className="text-xs text-gray-400">Dataset:</span>
@@ -135,14 +195,12 @@ export default function ResultCard({ result, index }) {
               </span>
             </div>
 
-            {/* Sequence */}
             <div className="flex items-center gap-2">
               <Video className="w-4 h-4 text-green-400 flex-shrink-0" />
               <span className="text-xs text-gray-400">Sequence:</span>
               <span className="text-sm text-white truncate">{sequence}</span>
             </div>
 
-            {/* Sensor */}
             <div className="flex items-center gap-2">
               <Camera className="w-4 h-4 text-purple-400 flex-shrink-0" />
               <span className="text-xs text-gray-400">Sensor:</span>
@@ -151,7 +209,6 @@ export default function ResultCard({ result, index }) {
               </span>
             </div>
 
-            {/* Frame Number */}
             <div className="flex items-center gap-2">
               <Hash className="w-4 h-4 text-orange-400 flex-shrink-0" />
               <span className="text-xs text-gray-400">Frame:</span>
@@ -161,7 +218,7 @@ export default function ResultCard({ result, index }) {
         </div>
       </article>
 
-      {/* Full-size Image Modal - Fixed positioning */}
+      {/* Modal - same as before */}
       {showModal && (
         <div
           className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
@@ -175,7 +232,6 @@ export default function ResultCard({ result, index }) {
           </button>
 
           <div className="max-w-7xl w-full flex flex-col items-center gap-4">
-            {/* Image */}
             <img
               src={imgSrc}
               alt={title}
@@ -183,11 +239,9 @@ export default function ResultCard({ result, index }) {
               onClick={(e) => e.stopPropagation()}
             />
 
-            {/* Metadata overlay - Fixed to not overlap */}
             <div className="w-full max-w-4xl bg-black/80 text-white p-4 rounded-lg backdrop-blur-sm border border-white/10">
               <h3 className="text-lg font-semibold mb-3">{title}</h3>
 
-              {/* Caption in modal */}
               {caption && (
                 <p className="text-sm text-gray-300 mb-3 pb-3 border-b border-white/10 italic">
                   "{caption}"
