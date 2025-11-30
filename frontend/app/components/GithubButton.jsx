@@ -6,8 +6,8 @@ export default function GitHubButton() {
     await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: 'https://vlm-dataset-navigator-frontend.vercel.app/header',
-        scopes: 'read:user user:email', 
+        redirectTo: 'http://localhost:3000/header',
+        scopes: 'read:user user:email',
       },
     });
   };
