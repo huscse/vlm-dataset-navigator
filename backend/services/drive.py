@@ -4,13 +4,12 @@ from functools import lru_cache
 from typing import Optional, List, Dict
 import os
 import time
-import ssl
-import asyncio
-import json
+import io
 import base64
 import tempfile
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -20,7 +19,6 @@ _env_key_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 _env_key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
 if _env_key_json:
-    # Decode base64 and write to temp file
     try:
         key_data = base64.b64decode(_env_key_json)
         tmp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
@@ -82,13 +80,27 @@ def resolve_path(root_folder_id: str, path: str) -> Optional[str]:
     
     return current_id
 
-def download_bytes(file_id: str) -> bytes:
-    """Download a file's content as bytes."""
+def download_bytes(file_id: str, max_retries=3):
+    """Download file bytes with retry logic"""
     service = _get_service()
     
-    try:
-        request = service.files().get_media(fileId=file_id)
-        content = request.execute()
-        return content
-    except HttpError as e:
-        raise RuntimeError(f"Failed to download file {file_id}: {e}")
+    for attempt in range(max_retries):
+        try:
+            request = service.files().get_media(fileId=file_id)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            buffer.seek(0)
+            return buffer.read()
+            
+        except Exception as e:
+            if attempt < max_retries - 1 and ("SSL" in str(e) or "timeout" in str(e).lower()):
+                wait_time = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s
+                print(f"[RETRY] Network error, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                time.sleep(wait_time)
+            else:
+                raise

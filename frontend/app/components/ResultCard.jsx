@@ -27,7 +27,8 @@ export default function ResultCard({ result, index }) {
   const { session } = useAuthSession();
 
   useEffect(() => {
-    const delay = Math.floor(index / 3) * 500;
+    // Stagger image loading to avoid overwhelming Google Drive
+    const delay = Math.floor(index / 2) * 1000; // Load 2 at a time, 1 second apart
     const timer = setTimeout(() => setShouldLoad(true), delay);
     return () => clearTimeout(timer);
   }, [index]);
@@ -57,11 +58,11 @@ export default function ResultCard({ result, index }) {
       const retryDelay = Math.pow(2, retryCount) * 1000;
       setTimeout(() => {
         setRetryCount((prev) => prev + 1);
-        e.currentTarget.src = imgSrc + '?retry=' + (retryCount + 1);
+        // Don't directly set src - let React re-render
+        setImgError(false); // Reset error state to trigger re-render
       }, retryDelay);
     } else {
       setImgError(true);
-      e.currentTarget.src = '';
     }
   };
 
@@ -110,6 +111,7 @@ export default function ResultCard({ result, index }) {
           {imgSrc && shouldLoad && !imgError ? (
             <>
               <img
+                key={`${imgSrc}-${retryCount}`} // Force re-render on retry
                 src={imgSrc}
                 alt={title}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

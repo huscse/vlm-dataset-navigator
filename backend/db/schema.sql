@@ -1,4 +1,3 @@
-cat > backend / db / schema.sql < < 'EOF' -- Create schema
 CREATE SCHEMA IF NOT EXISTS navis;
 
 -- Datasets table
@@ -65,5 +64,3 @@ CREATE TABLE IF NOT EXISTS navis.frames_staging (
     sample_token TEXT,
     media_key TEXT NOT NULL
 );
-
-EOF

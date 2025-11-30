@@ -58,21 +58,31 @@ export async function removeBookmark(frameId) {
  * Check if a frame is bookmarked
  */
 export async function isBookmarked(frameId) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) return false;
+    if (!user) return false;
 
-  const { data, error } = await supabase
-    .from('bookmarks')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('frame_id', frameId)
-    .single();
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('frame_id', frameId)
+      .maybeSingle(); // Changed from .single() to .maybeSingle()
 
-  if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-  return !!data;
+    // Only throw on actual errors, not "not found"
+    if (error && error.code !== 'PGRST116') {
+      console.warn('Bookmark check failed:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch (error) {
+    console.warn('Bookmark check error:', error);
+    return false; // Fail gracefully
+  }
 }
 
 /**
