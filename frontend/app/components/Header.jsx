@@ -18,6 +18,7 @@ export default function Header({ initialQuery }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
+  const [objectFilter, setObjectFilter] = useState(''); // NEW
 
   // Run search on mount if URL has query
   useEffect(() => {
@@ -35,18 +36,33 @@ export default function Header({ initialQuery }) {
     }
   };
 
-  const handleSearch = async (query, updateUrl = true) => {
+  const handleSearch = async (
+    query,
+    updateUrl = true,
+    filterObjects = objectFilter,
+  ) => {
+    // UPDATED
     setError(null);
     setLoading(true);
 
     if (updateUrl) {
       const url = new URL(window.location.href);
       url.searchParams.set('q', query);
+      if (filterObjects) {
+        url.searchParams.set('objects', filterObjects);
+      } else {
+        url.searchParams.delete('objects');
+      }
       window.history.pushState({}, '', url);
     }
 
     try {
-      const data = await semanticSearch({ text: query, k: 8 });
+      // Add objects filter to search
+      const data = await semanticSearch({
+        text: query,
+        k: 8,
+        objects: filterObjects || undefined, // UPDATED
+      });
       const hits = data.hits || [];
 
       // Show results immediately with placeholder captions
@@ -55,7 +71,7 @@ export default function Header({ initialQuery }) {
         caption: 'Generating summaries...',
       }));
       setResults(hitsWithPlaceholders);
-      setLoading(false); // Stop loading spinner - users can see results now!
+      setLoading(false);
 
       // Fetch captions in background (non-blocking)
       if (hits.length > 0) {
@@ -69,7 +85,6 @@ export default function Header({ initialQuery }) {
         })
           .then((res) => res.json())
           .then((captionData) => {
-            // Update with actual captions when ready
             const hitsWithCaptions = hits.map((h) => {
               const captionObj = captionData.captions.find(
                 (c) => c.frame_id === h.frame_id,
@@ -107,7 +122,12 @@ export default function Header({ initialQuery }) {
         onClose={() => setProfileOpen(false)}
       />
 
-      <HeroSection onSearch={(q) => handleSearch(q, true)} loading={loading} />
+      <HeroSection
+        onSearch={(q) => handleSearch(q, true)}
+        loading={loading}
+        objectFilter={objectFilter} // NEW
+        onObjectFilterChange={setObjectFilter} // NEW
+      />
 
       <SearchResults
         results={results}

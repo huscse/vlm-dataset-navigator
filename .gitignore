@@ -55,3 +55,4 @@ requirements.txt.backup
 pgdata/
 SimSun.ttf
 *.sql
+object_detection.log

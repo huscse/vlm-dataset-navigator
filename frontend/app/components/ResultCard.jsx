@@ -27,8 +27,8 @@ export default function ResultCard({ result, index }) {
   const { session } = useAuthSession();
 
   useEffect(() => {
-    // Stagger image loading to avoid overwhelming Google Drive
-    const delay = Math.floor(index / 2) * 1000; // Load 2 at a time, 1 second apart
+    // Stagger loading - load 1 image every 2 seconds
+    const delay = index * 2000;
     const timer = setTimeout(() => setShouldLoad(true), delay);
     return () => clearTimeout(timer);
   }, [index]);

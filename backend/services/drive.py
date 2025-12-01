@@ -7,12 +7,18 @@ import time
 import io
 import base64
 import tempfile
+import hashlib
+import httplib2
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+# Cache directory for downloaded files
+CACHE_DIR = Path("/tmp/drive_cache")
+CACHE_DIR.mkdir(exist_ok=True)
 
 # Handle credentials from environment variable (base64 encoded) or file
 _env_key_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
@@ -39,6 +45,8 @@ if not KEY_PATH.exists():
         "set GOOGLE_APPLICATION_CREDENTIALS to a file path, "
         "or set GOOGLE_APPLICATION_CREDENTIALS_JSON to base64 encoded JSON."
     )
+
+
 
 @lru_cache(maxsize=1)
 def _get_service():
@@ -80,8 +88,20 @@ def resolve_path(root_folder_id: str, path: str) -> Optional[str]:
     
     return current_id
 
-def download_bytes(file_id: str, max_retries=3):
-    """Download file bytes with retry logic"""
+def download_bytes(file_id: str, max_retries=5):
+    """
+    Download file from Google Drive with caching and retry logic.
+    Option 2: Local file caching - reduces API calls dramatically
+    """
+    # Check cache first (Option 2)
+    cache_key = hashlib.md5(file_id.encode()).hexdigest()
+    cache_path = CACHE_DIR / f"{cache_key}.bin"
+    
+    if cache_path.exists():
+        print(f"[CACHE HIT] {file_id}")
+        return cache_path.read_bytes()
+    
+    print(f"[CACHE MISS] Downloading {file_id}")
     service = _get_service()
     
     for attempt in range(max_retries):
@@ -95,12 +115,21 @@ def download_bytes(file_id: str, max_retries=3):
                 status, done = downloader.next_chunk()
             
             buffer.seek(0)
-            return buffer.read()
+            data = buffer.read()
+            
+            # Save to cache (Option 2)
+            try:
+                cache_path.write_bytes(data)
+                print(f"[CACHED] {file_id}")
+            except Exception as cache_error:
+                print(f"[CACHE WARNING] Failed to cache {file_id}: {cache_error}")
+            
+            return data
             
         except Exception as e:
-            if attempt < max_retries - 1 and ("SSL" in str(e) or "timeout" in str(e).lower()):
-                wait_time = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s
-                print(f"[RETRY] Network error, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 1.0
+                print(f"[RETRY] Attempt {attempt + 1}/{max_retries}, waiting {wait_time}s...")
                 time.sleep(wait_time)
             else:
                 raise
