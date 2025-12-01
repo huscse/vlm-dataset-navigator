@@ -1,5 +1,4 @@
-
-version: "3.9"
+version: '3.9'
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -8,14 +7,14 @@ services:
       POSTGRES_USER: navis
       POSTGRES_PASSWORD: navis
       POSTGRES_DB: navis
-      KMP_DUPLICATE_LIB_OK: "TRUE" 
+      KMP_DUPLICATE_LIB_OK: 'TRUE'
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - ./pgdata:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U navis -d navis"]
+      test: ['CMD-SHELL', 'pg_isready -U navis -d navis']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,8 +23,6 @@ services:
     image: adminer:4
     container_name: navis-adminer
     ports:
-      - "8080:8080"
+      - '8080:8080'
     depends_on:
       - postgres
-      
-ENV KMP_DUPLICATE_LIB_OK=TRUE

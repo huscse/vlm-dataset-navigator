@@ -44,8 +44,8 @@ class SearchHit(BaseModel):
     media_url: str
     dataset: str
     sequence: str
-    sensor: str              # ADD THIS
-    frame_number: str        # ADD THIS
+    sensor: str
+    frame_number: str
 
 class SearchResponse(BaseModel):
     query: str
@@ -79,49 +79,44 @@ def search(
     if _faiss_index is None or _frame_id_mapping is None:
         raise HTTPException(status_code=500, detail="FAISS index not loaded")
     
+    # AUTO-DETECT object keywords in query
+    if not objects:
+        query_lower = q.lower()
+        keyword_map = {
+            'car': ['car', 'cars', 'vehicle', 'vehicles', 'automobile', 'automobiles'],
+            'person': ['person', 'people', 'pedestrian', 'pedestrians', 'human', 'humans', 'walking', 'standing', 'man', 'woman'],
+            'truck': ['truck', 'trucks', 'lorry', 'lorries'],
+            'bicycle': ['bicycle', 'bicycles', 'bike', 'bikes', 'cycling', 'cyclist', 'cyclists'],
+            'motorcycle': ['motorcycle', 'motorcycles', 'motorbike', 'motorbikes'],
+            'traffic light': ['traffic light', 'traffic lights', 'stoplight', 'stoplights', 'signal', 'signals'],
+            'bus': ['bus', 'buses'],
+        }
+        
+        detected_objects = []
+        for obj_type, keywords in keyword_map.items():
+            if any(keyword in query_lower for keyword in keywords):
+                detected_objects.append(obj_type)
+        
+        if detected_objects:
+            objects = ','.join(detected_objects)
+            print(f"🔍 Auto-detected objects in query '{q}': {objects}")
+    
     # 1) Embed the text query
     qvec = get_text_embedding(q)  # returns list[float] of length 512
     qvec_np = np.array([qvec], dtype=np.float32)  # shape (1, 512)
     
     # 2) Determine search multiplier based on filters
-    # Calculate how many candidates to fetch to ensure we get k results after filtering
-    multiplier = 3  # Default: fetch 3x results for ranking flexibility
+    multiplier = 3  # Default
     
-    if dataset or sequence or objects:
-        # When filtering, estimate selectivity and increase multiplier accordingly
-        # This is more scalable than hardcoded multipliers
-        with get_conn() as conn, conn.cursor() as cur:
-            # Get total frame count and filtered count to estimate selectivity
-            filter_sql = "SELECT COUNT(*) as count FROM navis.frames f JOIN navis.sequences s ON s.id = f.sequence_id JOIN navis.datasets d ON d.id = s.dataset_id WHERE 1=1"
-            filter_params = []
-            
-            if dataset:
-                filter_sql += " AND d.slug = %s"
-                filter_params.append(dataset)
-            
-            if sequence:
-                filter_sql += " AND s.scene_token = %s"
-                filter_params.append(sequence)
-            
-            if objects:
-                object_list = [obj.strip() for obj in objects.split(',')]
-                placeholders_obj = ','.join(['%s'] * len(object_list))
-                filter_sql += f" AND EXISTS (SELECT 1 FROM navis.frame_objects fo WHERE fo.frame_id = f.id AND fo.object_type IN ({placeholders_obj}) AND fo.confidence > 0.5)"
-                filter_params.extend(object_list)
-            
-            cur.execute(filter_sql, filter_params)
-            filtered_count = cur.fetchone()[0]
-            
-            # Calculate selectivity ratio (what % of total frames pass filter)
-            total_count = _faiss_index.ntotal
-            selectivity = filtered_count / total_count if total_count > 0 else 1.0
-            
-            # Dynamic multiplier: fetch enough candidates to get k results
-            # Example: if only 10% match filter, need 10x multiplier
-            if selectivity > 0:
-                multiplier = max(3, int(1 / selectivity) + 1)
-            else:
-                multiplier = total_count  # Fetch everything if filter matches nothing
+    if objects:
+        # Check if searching for rare objects
+        rare_objects = ['truck', 'motorcycle', 'traffic light', 'dog', 'bicycle', 'bus']
+        object_list = [obj.strip() for obj in objects.split(',')]
+        
+        if any(obj in rare_objects for obj in object_list):
+            multiplier = 50  # Much higher for rare objects
+        else:
+            multiplier = 10  # Normal for common objects like car/person
     
     search_k = min(k * multiplier, _faiss_index.ntotal)
     distances, indices = _faiss_index.search(qvec_np, search_k)
@@ -133,7 +128,6 @@ def search(
     # 4) Fetch metadata from Postgres and apply filters
     placeholders = ','.join(['%s'] * len(candidate_frame_ids))
     
-
     sql = f"""
     SELECT
       f.id        AS frame_id,
@@ -148,6 +142,7 @@ def search(
     JOIN navis.sequences s ON s.id = f.sequence_id
     JOIN navis.datasets d  ON d.id = s.dataset_id
     WHERE f.id IN ({placeholders})
+    AND s.scene_token != '2011_09_26_drive_0001_sync'
     """
     
     params = candidate_frame_ids

@@ -10,7 +10,14 @@ function ensureBase() {
 }
 
 // ---- Semantic search over frames ----
-export async function semanticSearch({ text, k = 12, dataset, sequence } = {}) {
+export async function semanticSearch({
+  text,
+  k = 12,
+  dataset,
+  sequence,
+  objects,
+} = {}) {
+  // ADDED objects
   ensureBase();
   if (!text || !text.trim()) {
     return { query: text ?? '', k, hits: [] };
@@ -21,6 +28,7 @@ export async function semanticSearch({ text, k = 12, dataset, sequence } = {}) {
   params.set('k', String(k));
   if (dataset) params.set('dataset', dataset);
   if (sequence) params.set('sequence', sequence);
+  if (objects) params.set('objects', objects); // NEW: Add objects filter
 
   const res = await fetch(`${API_BASE}/search?${params.toString()}`, {
     method: 'GET',
