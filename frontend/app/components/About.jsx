@@ -92,7 +92,8 @@ const About = () => {
                 detects objects like cars, pedestrians, and traffic lights for
                 precise filtering. These embeddings are indexed using{' '}
                 <span className="text-white font-semibold">FAISS</span> to
-                enable millisecond-level similarity search across 2,794 frames.
+                enable millisecond-level similarity search across over 3000
+                frames.
               </p>
 
               {/* Technology Pills */}
@@ -129,7 +130,10 @@ const About = () => {
                 handles the backend API with{' '}
                 <span className="text-white font-semibold">PostgreSQL</span> and{' '}
                 <span className="text-white font-semibold">Supabase</span>{' '}
-                managing the database and authentication. Google Drive API
+                managing the database and authentication.{' '}
+                <span className="text-white font-semibold">
+                  Google Drive API
+                </span>{' '}
                 serves as the media storage layer. The result interleaving
                 algorithm ensures diverse results across all three datasets,
                 while duplicate detection prevents showing the same frame twice.
