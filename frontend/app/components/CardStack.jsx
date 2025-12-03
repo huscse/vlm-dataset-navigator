@@ -13,9 +13,9 @@ const CardStack = () => {
         <>
           <span className="text-white font-bold text-xl">Navis</span> is
           developed to make large-scale open-source autonomous driving datasets,
-          such as KITTI, nuScenes, Argoverse, and Waymo - effortless to explore.
-          Instead of manually searching through thousands of frames, you can
-          simply describe what you want to find, like
+          such as KITTI, BDD100K, and Argoverse - effortless to explore. Instead
+          of manually searching through thousands of frames, you can simply
+          describe what you want to find, like
           <em className="text-white"> "pedestrians at night" </em> or{' '}
           <em className="text-white"> "cars at an intersection" </em> and
           instantly retrieve the most relevant matches. The goal is to turn
@@ -32,33 +32,55 @@ const CardStack = () => {
         <>
           Under the hood, this system combines multiple state-of-the-art AI
           components.
-          <span className="text-white font-semibold"> CLIP </span> encodes both
-          visual frames and textual queries into a shared embedding space,
-          allowing the model to understand semantic relationships between what's
-          seen and what's described.
-          <span className="text-white font-semibold"> BLIP </span> generates
-          concise, descriptive captions for each frame, enriching metadata with
-          human-readable summaries. These embeddings are then indexed using
-          <span className="text-white font-semibold"> FAISS </span> (Facebook AI
-          Similarity Search) to enable high-speed similarity search across
-          millions of vectors.
+          <span className="text-white font-semibold"> CLIP ViT-B/32 </span>
+          encodes both visual frames and textual queries into a shared embedding
+          space with L2 normalization for cosine similarity matching.
+          <span className="text-white font-semibold"> BLIP-large </span>{' '}
+          generates rich, context-aware captions for each frame, providing
+          natural language descriptions of the driving scene.
+          <span className="text-white font-semibold"> YOLOv8 </span> detects
+          objects like cars, pedestrians, and traffic lights for precise
+          filtering. These embeddings are indexed using
+          <span className="text-white font-semibold"> FAISS </span> to enable
+          millisecond-level similarity search across 2,794 frames.
         </>
       ),
     },
     {
       id: 2,
-      title: 'The Impact',
+      title: 'The Tech Stack',
       gradient: 'from-black/95 via-slate-900/95 to-slate-800/95',
       content: (
         <>
-          By unifying these components, the navigator dramatically reduces the
-          manual overhead that researchers typically face when studying
-          open-source driving datasets. Whether you're investigating rare edge
-          cases like night-time jaywalking or curating balanced test sets for
-          perception models, the system helps you pinpoint exactly what you need
-          within seconds. It bridges the gap between raw visual data and human
-          intent, creating a more intuitive, language-driven interface for
-          exploring complex multimodal datasets.
+          Built with a modern full-stack architecture:
+          <span className="text-white font-semibold"> Next.js </span> and
+          <span className="text-white font-semibold"> React </span> power the
+          responsive frontend with Tailwind CSS for styling.
+          <span className="text-white font-semibold"> FastAPI </span> handles
+          the backend API with
+          <span className="text-white font-semibold"> PostgreSQL </span> and
+          <span className="text-white font-semibold"> Supabase </span> managing
+          the database and authentication. Google Drive API serves as the media
+          storage layer. The result interleaving algorithm ensures diverse
+          results across all three datasets, while duplicate detection prevents
+          showing the same frame twice.
+        </>
+      ),
+    },
+    {
+      id: 3,
+      title: 'The Impact',
+      gradient: 'from-slate-800/95 via-black/95 to-slate-900/95',
+      content: (
+        <>
+          By unifying these components, Navis dramatically reduces the manual
+          overhead that researchers typically face when studying open-source
+          driving datasets. Whether you're investigating rare edge cases like
+          night-time jaywalking or curating balanced test sets for perception
+          models, the system helps you pinpoint exactly what you need within
+          seconds. It bridges the gap between raw visual data and human intent,
+          creating a more intuitive, language-driven interface for exploring
+          complex multimodal datasets.
         </>
       ),
     },
