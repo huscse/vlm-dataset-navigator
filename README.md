@@ -78,19 +78,35 @@ Total processed frames: **~25,000**
 ---
 
 ## 🗂 Example Metadata Schema
-
 ```json
 {
-  "frame_id": "argo_001234",
-  "dataset": "Argoverse",
-  "filepath": "argo/log03/001234.jpg",
-  "timestamp": 1624029342,
-  "weather": "rainy",
-  "timeofday": "night",
-  "sequence": "log03",
-  "gps": [40.44062, -79.99593]
+  "frame_id": 152,
+  "dataset": "BDD100K",
+  "sequence": "b1c66a42-6f7d68ca",
+  "sensor": "camera_front",
+  "media_key": "val/b1c66a42-6f7d68ca.jpg",
+  "frame_number": 1,
+  "scene_token": null,
+  "timestamp": null,
+  "caption": "a car driving down a city street lined with buildings",
+  "objects": [
+    {
+      "class": "car",
+      "confidence": 0.89,
+      "bbox": [245.5, 312.8, 489.2, 445.6]
+    },
+    {
+      "class": "person",
+      "confidence": 0.76,
+      "bbox": [125.3, 298.1, 178.9, 412.5]
+    }
+  ],
+  "embedding": [0.0234, -0.1456, 0.0891, ...],  // 512-dimensional CLIP vector
+  "media_url": "https://drive.google.com/uc?id=...",
+  "similarity_score": 0.8542
 }
 ```
+---
 
 🛠 **Data Preprocessing**
 
