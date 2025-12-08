@@ -231,28 +231,141 @@ C --> B
 vlm-dataset-navigator/
 │
 ├── backend/
-│   ├── api/               # FastAPI endpoints
-│   ├── models/            # CLIP, BLIP models
-│   ├── search/            # FAISS index + query logic
-│   ├── data_loaders/      # KITTI, Argoverse, BDD100K readers
-│   ├── db/                # Postgres / Supabase utilities
-│   └── main.py            # FastAPI entrypoint
+│   ├── app/
+│   │   ├── __init__.py
+│   │   └── main.py                      # FastAPI application entry point
+│   │
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── search.py                    # Semantic search with dataset diversity
+│   │   ├── caption.py                   # BLIP-large caption generation
+│   │   ├── media.py                     # Google Drive media serving
+│   │   ├── frames.py                    # Frame metadata endpoints
+│   │   ├── datasets.py                  # Dataset information API
+│   │   └── sequences.py                 # Sequence browsing endpoints
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── text_embed.py                # CLIP text embedding service
+│   │   ├── drive.py                     # Google Drive API integration
+│   │   └── faiss_search.py              # FAISS similarity search wrapper
+│   │
+│   ├── db/
+│   │   ├── __init__.py
+│   │   └── postgres.py                  # PostgreSQL connection pool
+│   │
+│   ├── scripts/
+│   │   ├── init_db.py                   # Database schema initialization
+│   │   ├── ingest_kitti.py              # KITTI dataset ingestion
+│   │   ├── ingest_bdd10k_gdrive_auto.py # BDD100K automated ingestion
+│   │   ├── embed_kitti.py               # Generate CLIP embeddings for KITTI
+│   │   ├── embed_bdd10k.py              # Generate CLIP embeddings for BDD100K
+│   │   ├── detect_objects.py            # YOLOv8 batch object detection
+│   │   ├── build_faiss_index.py         # Build FAISS vector index
+│   │   └── caption_frames.py            # BLIP-large batch captioning
+│   │
+│   ├── faiss_indexes/
+│   │   ├── combined.index               # FAISS IndexFlatIP (2,794 vectors)
+│   │   ├── combined_mapping.npy         # Frame ID to FAISS index mapping
+│   │   ├── kitti.index                  # KITTI-only index (legacy)
+│   │   └── kitti_mapping.npy            # KITTI mapping (legacy)
+│   │
+│   ├── config/
+│   │   └── settings.py                  # Environment configuration
+│   │
+│   ├── data/                            # Sample data (gitignored)
+│   │   └── .gitkeep
+│   │
+│   ├── secrets/                         # API credentials (gitignored)
+│   │   ├── google_drive_credentials.json
+│   │   └── .gitkeep
+│   │
+│   ├── workers/                         # Background job processors
+│   │   ├── __init__.py
+│   │   └── embedder.py                  # Helper embedding file
+│   │
+│   ├── docker-compose.yml               # PostgreSQL + Adminer setup
+│   ├── Dockerfile                       # Backend container
+│   ├── requirements.txt                 # Python dependencies
+│   ├── .dockerignore                    # Docker build exclusions
+│   ├── .gitignore                       # Git exclusions
+│   ├── navis_backup.sql                 # Database backup
+│   └── README.md                        # Backend documentation
 │
 ├── frontend/
-│   ├── pages/             # Next.js routes
-│   ├── components/        # UI components
-│   └── utils/             # API helpers
+│   ├── app/
+│   │   ├── components/
+│   │   │   ├── About.jsx                # Project overview page
+│   │   │   ├── CardStack.jsx            # Tech stack information cards
+│   │   │   ├── Demo.jsx                 # Demo video display
+│   │   │   ├── DynamicGreeting.jsx      # Personalized greeting component
+│   │   │   ├── Footer.jsx               # Footer component
+│   │   │   ├── GithubButton.jsx         # GitHub repository link button
+│   │   │   ├── Header.jsx               # Page header component
+│   │   │   ├── Hero.jsx                 # Landing page hero section
+│   │   │   ├── HeroSection.jsx          # Hero section with animations
+│   │   │   ├── LandingPage.jsx          # Complete landing page
+│   │   │   ├── Navigation.jsx           # Main navigation with auth
+│   │   │   ├── ProfileModal.jsx         # User profile modal
+│   │   │   ├── ResultCard.jsx           # Individual frame card with metadata
+│   │   │   ├── SearchBar.jsx            # Natural language search input
+│   │   │   ├── SearchResults.jsx        # Results grid with diversity display
+│   │   │   ├── SignIn.jsx               # Sign in form component
+│   │   │   ├── SignUp.jsx               # Sign up form component
+│   │   │   ├── Team.jsx                 # Team member search animation
+│   │   │   └── TopNavBarHeader.jsx      # Top navigation bar
+│   │   │
+│   │   ├── search/
+│   │   │   └── page.jsx                 # Main search interface
+│   │   │
+│   │   ├── land/
+│   │   │   └── page.jsx                 # Landing page route
+│   │   │
+│   │   ├── about/
+│   │   │   └── page.jsx                 # About page route
+│   │   │
+│   │   ├── demo/
+│   │   │   └── page.jsx                 # Demo page route
+│   │   │
+│   │   ├── bookmarks/
+│   │   │   └── page.jsx                 # Saved frames page
+│   │   │
+│   │   ├── signin/
+│   │   │   └── page.jsx                 # Authentication page
+│   │   │
+│   │   ├── signup/
+│   │   │   └── page.jsx                 # User registration
+│   │   │
+│   │   ├── layout.js                    # Root layout with providers
+│   │   ├── globals.css                  # Global styles + Tailwind
+│   │   └── page.js                      # Homepage (redirects to /land)
+│   │
+│   ├── lib/
+│   │   ├── useAuthSession.js            # Supabase client configuration
+│   │   ├── supabaseClient.js            # Supabase client configuration
+│   │   └── api.js                       # Backend API wrapper functions
+│   │   └── bookmarks.js                 # Backend API wrapper functions
+│   │
+│   ├── public/
+│   │   ├── images/                      # Static images
+│   │   ├── Navis-demo.mp4               # Demo video (not self-hosted)
+│   │   └── favicon.ico                  # Site icon
+│   │
+│   ├── .env.local                       # Environment variables (gitignored)
+│   ├── .gitignore                       # Git exclusions
+│   ├── next.config.js                   # Next.js configuration
+│   ├── tailwind.config.js               # Tailwind CSS configuration
+│   ├── postcss.config.js                # PostCSS configuration
+│   ├── package.json                     # npm dependencies
+│   ├── package-lock.json                # Dependency lock file
+│   └── README.md                        # Frontend documentation
 │
-├── notebooks/             # Embeddings + preprocessing notebooks
-├── data/                  # Embeddings, metadata, example frames
-├── docs/                  # Design notes + diagrams
-├── tests/                 # Backend tests
+├── .github/
+│   └── workflows/
+│       └── frontend-deploy.yml          # Vercel deployment workflow
 │
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-├── import_database.sh
-└── navis_database_backup.sql
+├── .gitignore                           # Root-level git exclusions
+└── README.md                            # Main project documentation
 ```
 
 ---
