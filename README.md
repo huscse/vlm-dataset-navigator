@@ -373,26 +373,21 @@ vlm-dataset-navigator/
 # 🗝️ Code Highlights
 
 ### Key Backend Files
-
-- `backend/search/query.py`  
-  Main FAISS retrieval logic  
-
-- `backend/models/clip_model.py`  
-  Loads CLIP and encodes frames  
-
-- `backend/models/blip_model.py`  
-  Caption generator  
-
-- `backend/api/routes.py`  
-  Request/response handling  
+- `backend/routes/search.py` - Semantic search with FAISS retrieval and dataset diversity algorithm  
+- `backend/services/text_embed.py` - CLIP text embedding service for query encoding  
+- `backend/routes/caption.py` - BLIP-large caption generation endpoint  
+- `backend/app/main.py` - FastAPI application entry point with route registration  
+- `backend/services/drive.py` - Google Drive API integration for media serving  
+- `backend/db/postgres.py` - PostgreSQL connection pool and database utilities  
+- `backend/scripts/build_faiss_index.py` - FAISS index creation and management  
 
 ### Key Frontend Files
-
-- `frontend/components/ResultCard.tsx`  
-  Displays results + captions  
-
-- `frontend/pages/index.tsx`  
-  Search UI  
+- `frontend/app/components/SearchBar.jsx` - Natural language search input interface  
+- `frontend/app/components/SearchResults.jsx` - Results grid with dataset diversity display  
+- `frontend/app/components/ResultCard.jsx` - Individual frame card with metadata and AI captions  
+- `frontend/app/search/page.jsx` - Main search interface page  
+- `frontend/app/components/Navigation.jsx` - Main navigation with authentication state  
+- `frontend/lib/api.js` - Backend API wrapper functions
 
 ---
 
@@ -517,7 +512,6 @@ python backend/search/build_faiss_index.py
 
 # 📜 License
 This project is open source
-
 ---
 
 # 🙏 Acknowledgements
